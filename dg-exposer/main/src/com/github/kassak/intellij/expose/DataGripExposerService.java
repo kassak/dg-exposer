@@ -31,7 +31,7 @@ public class DataGripExposerService extends RestService {
 
   @Override
   protected boolean isMethodSupported(@NotNull HttpMethod method) {
-    return method == HttpMethod.GET || method == HttpMethod.POST;
+    return method == HttpMethod.GET || method == HttpMethod.POST || method == HttpMethod.DELETE;
   }
 
   @Nullable
@@ -84,6 +84,13 @@ public class DataGripExposerService extends RestService {
     return null;
   }
 
+  static String reportOk(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    return sendJson(jsonWriter -> {
+      jsonWriter.beginObject();
+      jsonWriter.endObject();
+    }, request, context);
+  }
+
   static String notFound(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
     sendStatus(HttpResponseStatus.NOT_FOUND, HttpUtil.isKeepAlive(request), context.channel());
     return null;
@@ -92,6 +99,10 @@ public class DataGripExposerService extends RestService {
   static String badRequest(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
     sendStatus(HttpResponseStatus.BAD_REQUEST, HttpUtil.isKeepAlive(request), context.channel());
     return null;
+  }
+
+  static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
+    return e.getMessage();
   }
 
   static boolean isEnd(@NotNull QueryStringDecoder urlDecoder, int base) {
@@ -104,5 +115,9 @@ public class DataGripExposerService extends RestService {
 
   private static boolean startsWith(@NotNull QueryStringDecoder urlDecoder, int offs, String frag) {
     return StringUtil.startsWith(urlDecoder.path(), offs, frag);
+  }
+
+  static boolean equal(@NotNull QueryStringDecoder urlDecoder, int offs, String frag) {
+    return urlDecoder.path().length() == offs + frag.length() && startsWith(urlDecoder, offs, frag);
   }
 }

@@ -83,7 +83,7 @@ public class ProjectHandler implements Disposable {
       return request.method() == HttpMethod.GET ? descDataSource(request, context, dataSource) : badRequest(request, context);
     }
     int next = proceedIfStartsWith(urlDecoder, base, "connections/");
-    if (next != -1) return getOrCreateDataSourceHandler(dataSource).processConnections(urlDecoder, request, context, base);
+    if (next != -1) return getOrCreateDataSourceHandler(dataSource).processConnections(urlDecoder, request, context, next);
     return badRequest(request, context);
   }
 

@@ -67,27 +67,61 @@ class DataSourceHandler implements Disposable {
       else if (request.method() == HttpMethod.POST) return processCreateConnection(request, context);
       else return badRequest(request, context);
     }
+    int i = urlDecoder.path().indexOf('/', base);
+    if (i != -1) {
+      String connectionId = urlDecoder.path().substring(base, i);
+      return processConnection(urlDecoder, request, context, i + 1, connectionId);
+    }
     return badRequest(request, context);
+  }
+
+  private String processConnection(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base, @NotNull String connectionId) throws IOException {
+    if (isEnd(urlDecoder, base)) {
+      return request.method() == HttpMethod.DELETE ? processCloseConnection(request, context, connectionId) : badRequest(request, context);
+    }
+    ConnectionHandler handler;
+    synchronized (myConnections) {
+      handler = myConnections.get(connectionId);
+    }
+    if (handler == null) return notFound(request, context);
+    return handler.processConnection(urlDecoder, request, context, base);
   }
 
   static String descDataSource(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull LocalDataSource dataSource) throws IOException {
     return sendJson(json -> descDataSource(json, dataSource), request, context);
   }
 
-  private String processCreateConnection(FullHttpRequest request, ChannelHandlerContext context) throws IOException {
+  private String processCreateConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
     try {
       ConnectionHandler handler = createConnection();
+      if (handler == null) return badRequest(request, context);
       sendJson(handler::descConnection, request, context);
       return null;
     }
     catch (SQLException e) {
-      return e.getMessage();
+      return sendError(e, request, context);
     }
+  }
+
+  private String processCloseConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull String connectionId) throws IOException {
+    ConnectionHandler handler;
+    synchronized (myConnections) {
+      handler = myConnections.remove(connectionId);
+    }
+    if (handler == null) return notFound(request, context);
+    Disposer.dispose(handler);
+    return reportOk(request, context);
   }
 
   private ConnectionHandler createConnection() throws SQLException {
     GuardedRef<DatabaseConnection> c;
     c = DatabaseConnectionManager.getInstance().build(myProject == null ? getAnyProjects() : myProject, myDataSource).create();
+    if (c == null) return null;
+    try { //todo:
+      c.get().setAutoCommit(false);
+    }
+    catch (SQLException ignored) {
+    }
     ConnectionHandler handler = new ConnectionHandler(c);
     Disposer.register(this, handler);
     synchronized (myConnections) {

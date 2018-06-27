@@ -5,10 +5,16 @@ import com.intellij.database.dataSource.DatabaseConnection;
 import com.intellij.database.dataSource.DatabaseConnectionManager;
 import com.intellij.database.util.GuardedRef;
 import com.intellij.openapi.Disposable;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.UUID;
+
+import static com.github.kassak.intellij.expose.DataGripExposerService.*;
 
 class ConnectionHandler implements Disposable {
   private final UUID myUuid;
@@ -32,6 +38,32 @@ class ConnectionHandler implements Disposable {
 
   DatabaseConnection getConnection() {
     return myConnection.get();
+  }
+
+  String processConnection(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
+    if (equal(urlDecoder, base, "commit")) return processCommit(request, context);
+    if (equal(urlDecoder, base, "rollback")) return processRollback(request, context);
+    return badRequest(request, context);
+  }
+
+  private String processCommit(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    try {
+      myConnection.get().commit();
+      return reportOk(request, context);
+    }
+    catch (SQLException e) {
+      return sendError(e, request, context);
+    }
+  }
+
+  private String processRollback(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    try {
+      myConnection.get().rollback();
+      return reportOk(request, context);
+    }
+    catch (SQLException e) {
+      return sendError(e, request, context);
+    }
   }
 
   @Override
