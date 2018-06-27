@@ -1,0 +1,17 @@
+<idea-plugin url="https://github.com/kassak/geo-support">
+  <id>com.github.kassak.dg-exposer</id>
+  <name>DataGrip exposer</name>
+  <description>Exposes database connections as REST API</description>
+  <vendor url="https://github.com/kassak"/>
+
+  <depends>com.intellij.modules.lang</depends>
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.database</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <httpRequestHandler implementation="com.github.kassak.intellij.expose.DataGripExposerService"/>
+    <projectService serviceImplementation="com.github.kassak.intellij.expose.ProjectHandler"/>
+    <projectService serviceImplementation="com.github.kassak.intellij.expose.ProjectHandler$App"/>
+  </extensions>
+
+</idea-plugin>

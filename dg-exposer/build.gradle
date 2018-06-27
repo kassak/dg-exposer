@@ -1,0 +1,44 @@
+plugins {
+  id 'org.jetbrains.intellij' version "0.3.4"
+}
+repositories {
+  mavenCentral()
+}
+
+allprojects {
+  version 0.01
+
+  apply plugin: 'java'
+  sourceCompatibility = 1.8
+  targetCompatibility = 1.8
+
+  sourceSets {
+    main {
+      java.srcDirs 'main/src'
+      resources.srcDirs 'main/resources'
+    }
+    test {
+      java.srcDir 'tests/src'
+      resources.srcDirs 'tests/testData'
+    }
+  }
+  apply plugin: 'org.jetbrains.intellij'
+  intellij {
+    pluginName 'dg-exposer'
+    //version 'IU-182.3458.5'
+    localPath '/home/kassak/.local/opt/idea-IU-current'
+    type 'IU'
+    plugins 'DatabaseTools'
+  }
+
+  patchPluginXml {
+    sinceBuild '182'
+    untilBuild '192'
+  }
+}
+
+publishPlugin {
+  username project.properties.get("publish.user")
+  password project.properties.get("publish.password")
+  channels project.properties.get("publish.channel") ?: "Stable"
+}
