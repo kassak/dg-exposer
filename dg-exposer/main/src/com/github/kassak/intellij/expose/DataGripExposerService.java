@@ -1,5 +1,6 @@
 package com.github.kassak.intellij.expose;
 
+import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.intellij.database.dataSource.DataSourceStorage;
 import com.intellij.database.dataSource.LocalDataSource;
@@ -74,6 +75,12 @@ public class DataGripExposerService extends RestService {
     return ProjectManager.getInstance().getDefaultProject();
   }
 
+
+  static void readJson(@NotNull ThrowableConsumer<JsonReader, IOException> reader, @NotNull FullHttpRequest request) throws IOException {
+    try (JsonReader json = createJsonReader(request)) {
+      reader.consume(json);
+    }
+  }
 
   static String sendJson(@NotNull ThrowableConsumer<JsonWriter, IOException> writer, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
     BufferExposingByteArrayOutputStream byteOut = new BufferExposingByteArrayOutputStream();

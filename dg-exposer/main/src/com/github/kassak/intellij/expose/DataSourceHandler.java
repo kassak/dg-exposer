@@ -103,16 +103,6 @@ class DataSourceHandler implements Disposable {
     }
   }
 
-  private String processCloseConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull String connectionId) throws IOException {
-    ConnectionHandler handler;
-    synchronized (myConnections) {
-      handler = myConnections.remove(connectionId);
-    }
-    if (handler == null) return notFound(request, context);
-    Disposer.dispose(handler);
-    return reportOk(request, context);
-  }
-
   private ConnectionHandler createConnection() throws SQLException {
     GuardedRef<DatabaseConnection> c;
     c = DatabaseConnectionManager.getInstance().build(myProject == null ? getAnyProjects() : myProject, myDataSource).create();
@@ -128,6 +118,16 @@ class DataSourceHandler implements Disposable {
       myConnections.put(handler.getUuid().toString(), handler);
     }
     return handler;
+  }
+
+  private String processCloseConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull String connectionId) throws IOException {
+    ConnectionHandler handler;
+    synchronized (myConnections) {
+      handler = myConnections.remove(connectionId);
+    }
+    if (handler == null) return notFound(request, context);
+    Disposer.dispose(handler);
+    return reportOk(request, context);
   }
 
   private String processDescConnections(FullHttpRequest request, ChannelHandlerContext context) throws IOException {

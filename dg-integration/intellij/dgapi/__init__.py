@@ -98,7 +98,7 @@ class Connection(object):
         self._dg.rollback(self._ds, self._con)
 
     def cursor(self):
-        pass #todo:
+        return Cursor(self)
 
     def __del__(self):
         self._close()
@@ -107,3 +107,87 @@ class Connection(object):
         if self._con is not None:
             self._dg.close_connection(self._ds, self._con)
             self._con = None
+
+
+class Cursor(object):
+    def __init__(self, con):
+        self._con = con
+        self._stmt = None
+        self._rs = None
+        self._last_rc = -1
+        self.arraysize = 1
+
+    @property
+    def description(self):
+        if self._rs is None:
+            return None
+        # todo
+
+    @property
+    def rowcount(self):
+        return self._last_rc
+
+    # def callproc(self):
+    #     pass
+
+    def close(self):
+        if self._con is None:
+            raise Error("Cursor closed")
+        self._close()
+
+    def __del__(self):
+        self._close()
+
+    def _close(self):
+        if self._con is None:
+            return
+        self._cleanup()
+        self._con = None
+
+    def _cleanup(self):
+        # todo: close self._stmt
+        self._cleanup_rs()
+
+    def _cleanup_rs(self):
+        # todo: close self._rs
+        pass
+
+    def execute(self, operation, parameters=(), **kwargs):
+        self._cleanup()
+        self._stmt = None #todo
+
+    def executemany(self, operation, seq_of_parameters, **kwargs):
+        self._cleanup()
+        self._stmt = None #todo
+
+    def _check_rs(self):
+        if self._rs is None:
+            raise Error("No result set")
+
+    def fetchone(self):
+        self._check_rs()
+        #todo
+
+    def fetchmany(self, size=None):
+        self._check_rs()
+        if size is None:
+            size = self.arraysize
+        #todo
+
+    def fetchall(self):
+        self._check_rs()
+        #todo
+
+    def nextset(self):
+        if self._stmt is None:
+            raise Error("No statement")
+        self._cleanup_rs()
+        #todo
+
+    def setinputsizes(self, sizes):
+        pass
+
+    def setoutputsizes(self, sizes, column=None):
+        pass
+
+

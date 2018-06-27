@@ -5,13 +5,18 @@ import com.intellij.database.dataSource.DatabaseConnection;
 import com.intellij.database.dataSource.DatabaseConnectionManager;
 import com.intellij.database.util.GuardedRef;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.util.Disposer;
+import com.intellij.util.containers.ContainerUtil;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.github.kassak.intellij.expose.DataGripExposerService.*;
@@ -19,6 +24,7 @@ import static com.github.kassak.intellij.expose.DataGripExposerService.*;
 class ConnectionHandler implements Disposable {
   private final UUID myUuid;
   private final GuardedRef<DatabaseConnection> myConnection;
+  private final Map<String, CursorHandler> myCursors = ContainerUtil.newHashMap();
 
   ConnectionHandler(GuardedRef<DatabaseConnection> myConnection) {
     myUuid = UUID.randomUUID();
@@ -41,10 +47,59 @@ class ConnectionHandler implements Disposable {
   }
 
   String processConnection(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
-    if (equal(urlDecoder, base, "commit")) return processCommit(request, context);
-    if (equal(urlDecoder, base, "rollback")) return processRollback(request, context);
+    if (equal(urlDecoder, base, "commit")) return request.method() == HttpMethod.POST ? processCommit(request, context) : badRequest(request, context);
+    if (equal(urlDecoder, base, "rollback")) return request.method() == HttpMethod.POST ? processRollback(request, context) : badRequest(request, context);
+    int next = proceedIfStartsWith(urlDecoder, base, "cursors/");
+    if (next != -1) return processCursors(urlDecoder, request, context, next);
     return badRequest(request, context);
   }
+
+  private String processCursors(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
+    if (isEnd(urlDecoder, base)) {
+      if (request.method() == HttpMethod.GET) return processDescCursors(request, context);
+      else if (request.method() == HttpMethod.POST) return processCreateCursor(request, context);
+      else return badRequest(request, context);
+    }
+    return badRequest(request, context);
+  }
+
+  private String processDescCursors(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    List<CursorHandler> cursors;
+    synchronized (myCursors) {
+      cursors = ContainerUtil.newArrayList(myCursors.values());
+    }
+    return sendJson(json -> descCursors(json, cursors), request, context);
+  }
+
+  private void descCursors(JsonWriter json, List<CursorHandler> cursors) throws IOException {
+    json.beginArray();
+    for (CursorHandler cursor: cursors) {
+      cursor.descCursor(json);
+    }
+    json.endArray();
+  }
+
+  private String processCreateCursor(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    try {
+      CursorHandler handler = createCursor();
+      if (handler == null) return badRequest(request, context);
+      sendJson(handler::descCursor, request, context);
+      return null;
+    }
+    catch (SQLException e) {
+      return sendError(e, request, context);
+    }
+  }
+
+  private CursorHandler createCursor() throws SQLException {
+    CursorHandler handler = new CursorHandler(getConnection());
+    Disposer.register(this, handler);
+    synchronized (myCursors) {
+      myCursors.put(handler.getUuid().toString(), handler);
+    }
+    return handler;
+  }
+
 
   private String processCommit(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
     try {
