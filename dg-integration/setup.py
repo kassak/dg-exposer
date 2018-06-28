@@ -8,7 +8,7 @@ setup(
     license='MIT',
     packages=['intellij', 'intellij.dgapi'],
     install_requires=[
-       'ij-discoverer',
+       'ij-discoverer', 'sqlalchemy'
     ],
     keywords='IntelliJ IDEA DataGrip PhpStorm PyCharm GoLand'
 )

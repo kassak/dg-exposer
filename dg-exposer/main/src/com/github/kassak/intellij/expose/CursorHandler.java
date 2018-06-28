@@ -61,7 +61,7 @@ class CursorHandler implements Disposable {
     try {
       if (!query.isNull()) {
         cleanup();
-        myStatement = myConnection.prepareStatement(query.get());
+        myStatement = myConnection.getJdbcConnection().prepareStatement(query.get());
       }
       else if (myStatement == null) {
         return badRequest(request, context);
