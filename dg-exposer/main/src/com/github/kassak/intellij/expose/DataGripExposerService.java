@@ -9,6 +9,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.ExceptionUtil;
 import com.intellij.util.ThrowableConsumer;
 import com.intellij.util.containers.JBIterable;
 import io.netty.channel.ChannelHandlerContext;
@@ -109,7 +110,7 @@ public class DataGripExposerService extends RestService {
   }
 
   static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    return sendError(e.getMessage(), request, context);
+    return sendError(ExceptionUtil.getThrowableText(e), request, context);
   }
 
   static String sendError(@NotNull String msg, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {

@@ -48,6 +48,15 @@ class TestDBAPI(unittest.TestCase):
                 cur.execute('select ?, ?', ('mama', 'papa'))
                 self.assertIsNone(cur.nextset())
 
+    def test_describe(self):
+        inst = any_instance()
+        inst.noisy = True
+        with connect(dsn='identifier.sqlite', inst=inst) as c:
+            with c.cursor() as cur:
+                cur.execute('select ? as m, ? as p', ('mama', 'papa'))
+                self.assertIsNotNone(cur.description)
+                self.assertEqual(['m', 'p'], [p[0] for p in cur.description])
+
 
 
 if __name__ == '__main__':

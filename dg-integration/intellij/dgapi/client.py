@@ -65,6 +65,10 @@ class DGClient(object):
         r.method = "POST"
         return self._perform(r)
 
+    def describe(self, ds, con, cur):
+        r = self._mk_request("database/dataSources/{0}/connections/{1}/cursors/{2}/describe", ds, con, cur)
+        return self._perform(r)
+
     def _perform(self, r):
         return self._c.perform_json(r)
 

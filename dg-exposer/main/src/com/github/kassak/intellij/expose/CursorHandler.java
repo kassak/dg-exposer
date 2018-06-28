@@ -16,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
@@ -49,6 +50,7 @@ class CursorHandler implements Disposable {
     if (equal(urlDecoder, base, "execute")) return request.method() == HttpMethod.POST ? processExecute(request, context) : badRequest(request, context);
     if (equal(urlDecoder, base, "fetch")) return request.method() == HttpMethod.GET ? processFetch(urlDecoder, request, context) : badRequest(request, context);
     if (equal(urlDecoder, base, "nextSet")) return request.method() == HttpMethod.POST ? processNextSet(request, context) : badRequest(request, context);
+    if (equal(urlDecoder, base, "describe")) return request.method() == HttpMethod.GET ? processDescribe(request, context) : badRequest(request, context);
     return badRequest(request, context);
   }
 
@@ -103,6 +105,42 @@ class CursorHandler implements Disposable {
     catch (SQLException e) {
       return sendError(e, request, context);
     }
+  }
+
+  private String processDescribe(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    if (myResultSet == null) return badRequest(request, context);
+    try {
+      return sendJson(json -> {
+        try {
+          describe(json);
+        }
+        catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      }, request, context);
+    }
+    catch (RuntimeException e) {
+      return sendError(e, request, context);
+    }
+  }
+
+  private void describe(JsonWriter json) throws SQLException, IOException {
+    ResultSetMetaData metaData = myResultSet.isClosed() ? null : myResultSet.getMetaData();
+    json.beginArray();
+    int count = metaData == null ? 0 : metaData.getColumnCount();
+    for (int i = 0; i < count; ++i) {
+      describeColumn(json, metaData, i);
+    }
+    json.endArray();
+  }
+
+  private void describeColumn(JsonWriter json, ResultSetMetaData metaData, int i) throws IOException, SQLException {
+    json.beginObject();
+    json.name("name").value(metaData.getColumnName(i + 1));
+    json.name("type").value("String"); //todo: metaData.getColumnClassName(i + 1)
+    json.name("precision").value(metaData.getPrecision(i + 1));
+    json.name("scale").value(metaData.getScale(i + 1));
+    json.endObject();
   }
 
   private String processFetch(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
