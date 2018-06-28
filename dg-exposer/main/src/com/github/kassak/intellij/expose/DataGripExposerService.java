@@ -49,9 +49,9 @@ public class DataGripExposerService extends RestService {
     if (isEnd(urlDecoder, base)) {
       return request.method() == HttpMethod.GET ? ProjectHandler.processDescAllDataSources(request, context) : badRequest(request, context);
     }
-    int i = urlDecoder.path().indexOf('/', base);
-    if (i != -1) {
-      return ProjectHandler.processDataSource(urlDecoder, request, context, i + 1, urlDecoder.path().substring(base, i));
+    String dataSourceId = extractItem(urlDecoder, base);
+    if (dataSourceId != null) {
+      return ProjectHandler.processDataSource(urlDecoder, request, context, base + dataSourceId.length() + 1, dataSourceId);
     }
     return badRequest(request, context);
   }
@@ -108,8 +108,16 @@ public class DataGripExposerService extends RestService {
     return null;
   }
 
-  static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
-    return e.getMessage();
+  static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    return sendError(e.getMessage(), request, context);
+  }
+
+  static String sendError(@NotNull String msg, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    return sendJson(json -> {
+      json.beginObject();
+      json.name("error").value(msg);
+      json.endObject();
+    }, request, context);
   }
 
   static boolean isEnd(@NotNull QueryStringDecoder urlDecoder, int base) {
@@ -126,5 +134,11 @@ public class DataGripExposerService extends RestService {
 
   static boolean equal(@NotNull QueryStringDecoder urlDecoder, int offs, String frag) {
     return urlDecoder.path().length() == offs + frag.length() && startsWith(urlDecoder, offs, frag);
+  }
+
+  @Nullable
+  static String extractItem(@NotNull QueryStringDecoder urlDecoder, int offs) {
+    int i = urlDecoder.path().indexOf('/', offs);
+    return i != -1 ? urlDecoder.path().substring(offs, i) : null;
   }
 }

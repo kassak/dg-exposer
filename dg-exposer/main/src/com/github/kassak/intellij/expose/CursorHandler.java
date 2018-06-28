@@ -3,7 +3,7 @@ package com.github.kassak.intellij.expose;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.intellij.database.dataSource.DatabaseConnection;
-import com.intellij.database.dataSource.DatabaseConnectionManager;
+import com.intellij.database.util.JdbcUtil;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Ref;
 import com.intellij.util.containers.ContainerUtil;
@@ -14,8 +14,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +24,8 @@ import static com.github.kassak.intellij.expose.DataGripExposerService.*;
 class CursorHandler implements Disposable {
   private final UUID myUuid;
   private final DatabaseConnection myConnection;
+  private PreparedStatement myStatement;
+  private ResultSet myResultSet;
 
   CursorHandler(DatabaseConnection connection) {
     myUuid = UUID.randomUUID();
@@ -41,7 +43,7 @@ class CursorHandler implements Disposable {
     return myUuid;
   }
 
-  String processCursors(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
+  String processCursor(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
     if (equal(urlDecoder, base, "execute")) return processExecute(request, context);
     return badRequest(request, context);
   }
@@ -50,13 +52,26 @@ class CursorHandler implements Disposable {
     Ref<String> query = Ref.create();
     List<Object> params = ContainerUtil.newArrayList();
     parseExecRequest(request, query, params);
-    if (query.isNull()) return badRequest(request, context);
     try {
-      PreparedStatement ps = myConnection.prepareStatement(query.get());
-      for (int i = 0; i < params.size(); ++i) {
-        ps.setObject(i, params.get(i));
+      if (!query.isNull()) {
+        cleanup();
+        myStatement = myConnection.prepareStatement(query.get());
       }
-      return reportOk(request, context);
+      else if (myStatement == null) {
+        return badRequest(request, context);
+      }
+      else {
+        cleanupResultSet();
+      }
+      for (int i = 0; i < params.size(); ++i) {
+        myStatement.setObject(i, params.get(i));
+      }
+      int count = myStatement.execute() ? -1 : myStatement.getUpdateCount();
+      return sendJson(json -> {
+        json.beginObject();
+        json.name("rowcount").value(count);
+        json.endObject();
+      }, request, context);
     }
     catch (SQLException e) {
       return sendError(e, request, context);
@@ -99,6 +114,16 @@ class CursorHandler implements Disposable {
 
   @Override
   public void dispose() {
+    cleanup();
+  }
 
+  private void cleanup() {
+    JdbcUtil.closeStatementSafe(myStatement);
+    myStatement = null;
+  }
+
+  private void cleanupResultSet() {
+    JdbcUtil.closeResultSetSafe(myResultSet);
+    myResultSet = null;
   }
 }

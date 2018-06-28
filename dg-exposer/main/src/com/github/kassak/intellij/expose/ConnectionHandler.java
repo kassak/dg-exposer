@@ -60,7 +60,31 @@ class ConnectionHandler implements Disposable {
       else if (request.method() == HttpMethod.POST) return processCreateCursor(request, context);
       else return badRequest(request, context);
     }
+    String cursorId = extractItem(urlDecoder, base);
+    if (cursorId != null) return processCursor(urlDecoder, request, context, base + cursorId.length() + 1, cursorId);
     return badRequest(request, context);
+  }
+
+  private String processCursor(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base, String cursorId) throws IOException {
+    if (isEnd(urlDecoder, base)) {
+      return request.method() == HttpMethod.DELETE ? processCloseCursor(request, context, cursorId) : badRequest(request, context);
+    }
+    CursorHandler handler;
+    synchronized (myCursors){
+      handler = myCursors.get(cursorId);
+    }
+    if (handler == null) return notFound(request, context);
+    return handler.processCursor(urlDecoder, request, context, base);
+  }
+
+  private String processCloseCursor(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull String cursorId) throws IOException {
+    CursorHandler handler;
+    synchronized (myCursors) {
+      handler = myCursors.remove(cursorId);
+    }
+    if (handler == null) return notFound(request, context);
+    Disposer.dispose(handler);
+    return reportOk(request, context);
   }
 
   private String processDescCursors(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {

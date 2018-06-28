@@ -67,11 +67,8 @@ class DataSourceHandler implements Disposable {
       else if (request.method() == HttpMethod.POST) return processCreateConnection(request, context);
       else return badRequest(request, context);
     }
-    int i = urlDecoder.path().indexOf('/', base);
-    if (i != -1) {
-      String connectionId = urlDecoder.path().substring(base, i);
-      return processConnection(urlDecoder, request, context, i + 1, connectionId);
-    }
+    String connectionId = extractItem(urlDecoder, base);
+    if (connectionId != null) return processConnection(urlDecoder, request, context, base + connectionId.length() + 1, connectionId);
     return badRequest(request, context);
   }
 
