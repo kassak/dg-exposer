@@ -24,9 +24,12 @@ class Cursor(object):
 
     @property
     def description(self):
+        self._ensure_desc()
+        return self._desc
+
+    def _ensure_desc(self):
         if self._desc is None:
             self._desc = _parse_desc(_handle_error(self._dg.describe(self._con._ds, self._con._con, self._cursor)))
-        return self._desc
 
     @property
     def rowcount(self):
@@ -68,6 +71,7 @@ class Cursor(object):
                                               _format_parameters(parameters)))
 
     def _fetch(self, limit):
+        self._ensure_desc()
         return _deserialize_rows(_handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)))
 
     def fetchone(self):
@@ -132,7 +136,7 @@ def _parse_desc(desc):
         d.get('precision'),
         d.get('scale'),
         None
-    ) for d in desc]
+    ) for d in desc] if desc else None
 
 
 def _parse_type(type):

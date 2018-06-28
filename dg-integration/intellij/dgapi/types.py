@@ -19,6 +19,9 @@ class TypeCode(object):
     def __str__(self):
         return self._code
 
+    def __hash__(self):
+        return hash(self._code)
+
 
 def DateFromTicks(ticks):
     return Date(*time.localtime(ticks)[:3])

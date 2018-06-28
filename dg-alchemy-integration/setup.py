@@ -12,7 +12,7 @@ setup(
     author='Alexander Kass',
     description='Implementation of SQLAlchemy API for DataGrip connection',
     license='MIT',
-    packages=['intellij'],
+    packages=['intellij', 'intellij.alchemy'],
     install_requires=[
         'dg-integration',
     ],

@@ -11,6 +11,7 @@ class TestDBAPI(unittest.TestCase):
             with c.cursor() as cur:
                 cur.execute('create table a(a int)')
                 c.commit()
+                c.rollback()
 
     def test_fetch_one(self):
         inst = any_instance()

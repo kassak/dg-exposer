@@ -3,6 +3,7 @@ import json
 
 class DGClient(object):
     def __init__(self, client):
+        client.noisy = True
         self._c = client
 
     def data_sources(self):
@@ -49,6 +50,8 @@ class DGClient(object):
     def execute(self, ds, con, cur, operation, parameters):
         r = self._mk_request("database/dataSources/{0}/connections/{1}/cursors/{2}/execute", ds, con, cur)
         r.method = "POST"
+        if self._c.noisy:
+            print(operation)
         body = {'parameters': parameters}
         if operation is not None:
             body['operation'] = operation

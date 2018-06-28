@@ -108,7 +108,6 @@ class CursorHandler implements Disposable {
   }
 
   private String processDescribe(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    if (myResultSet == null) return badRequest(request, context);
     try {
       return sendJson(json -> {
         try {
@@ -125,7 +124,7 @@ class CursorHandler implements Disposable {
   }
 
   private void describe(JsonWriter json) throws SQLException, IOException {
-    ResultSetMetaData metaData = myResultSet.isClosed() ? null : myResultSet.getMetaData();
+    ResultSetMetaData metaData = myResultSet == null || myResultSet.isClosed() ? null : myResultSet.getMetaData();
     json.beginArray();
     int count = metaData == null ? 0 : metaData.getColumnCount();
     for (int i = 0; i < count; ++i) {
