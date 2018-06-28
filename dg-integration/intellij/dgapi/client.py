@@ -55,11 +55,20 @@ class DGClient(object):
         r.data = bytes(json.dumps(body), 'utf8')
         return self._perform(r)
 
+    def fetch(self, ds, con, cur, limit):
+        r = self._mk_request("database/dataSources/{0}/connections/{1}/cursors/{2}/fetch", ds, con, cur,
+                             limit=limit)
+        return self._perform(r)
+
     def _perform(self, r):
         return self._c.perform_json(r)
 
-    def _mk_request(self, s, *objs):
-        return self._c.request(s.format(*[o['uuid'] for o in objs]))
+    def _mk_request(self, s, *objs, **kwargs):
+        url = s.format(*[o['uuid'] for o in objs])
+        params = "&".join("{0}={1}".format(k, v) for k, v in kwargs.items() if v is not None)
+        if len(params) != 0:
+            url += "?" + params
+        return self._c.request(url)
 
     def __repr__(self):
         return "<DB:{0}>".format(repr(self._c))

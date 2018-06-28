@@ -54,29 +54,24 @@ class Cursor(object):
         if operation is None:
             raise Error('Operation should not be None')
         for i, parameters in enumerate(seq_of_parameters):
-            res = self._execute(operation if i == 0 else None, parameters)
+            self._execute(operation if i == 0 else None, parameters)
 
     def _execute(self, operation, parameters):
-        return _handle_error(self._dg.execute(self._con._ds, self._con._con, self._cursor, operation, _format_parameters(parameters)))
+        return _handle_error(
+            self._dg.execute(self._con._ds, self._con._con, self._cursor, operation, _format_parameters(parameters)))
 
-
-    def _check_rs(self):
-        if self._rs is None:
-            raise Error("No result set")
+    def _fetch(self, limit):
+        return deserialize_rows(_handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)))
 
     def fetchone(self):
-        self._check_rs()
-        # todo
+        res = self._fetch(1)
+        return res[0] if res else None
 
     def fetchmany(self, size=None):
-        self._check_rs()
-        if size is None:
-            size = self.arraysize
-        # todo
+        return self._fetch(size if size is not None else self.arraysize)
 
     def fetchall(self):
-        self._check_rs()
-        # todo
+        return self._fetch(None)
 
     def nextset(self):
         if self._stmt is None:
@@ -97,7 +92,16 @@ def _format_parameters(params):
         for p in params
     ]
 
+
 def _handle_error(data):
     if 'error' in data:
         raise DatabaseError(data['error'])
     return data
+
+
+def deserialize_rows(rows):
+    return [deserialize_row(r) for r in rows]
+
+
+def deserialize_row(row):
+    return row
