@@ -1,5 +1,6 @@
 from sqlalchemy.connectors import Connector
 
+
 class DGAPIConnector(Connector):
     driver = 'dgapi'
 
@@ -10,7 +11,7 @@ class DGAPIConnector(Connector):
     supports_unicode_binds = True
 
     supports_native_decimal = True
-    default_paramstyle = 'named'
+    default_paramstyle = 'qmark'
 
     def __init__(self, **kw):
         super(DGAPIConnector, self).__init__(**kw)
@@ -21,12 +22,13 @@ class DGAPIConnector(Connector):
         return module
 
     def create_connect_args(self, url):
-        return [[], url.query] #[[";".join(connectors)], connect_args]
+        c_str = str(url)
+        c_str = c_str[c_str.index("://") + 3:]
+        return [[], {"dsn": c_str}]
 
     def is_disconnect(self, e, connection, cursor):
         if isinstance(e, self.dbapi.ProgrammingError):
             return "The cursor's connection has been closed." in str(e) or \
-                'Attempt to use a closed connection.' in str(e)
+                   'Attempt to use a closed connection.' in str(e)
         else:
             return False
-
