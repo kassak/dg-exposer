@@ -6,6 +6,7 @@ import com.intellij.database.dataSource.DatabaseConnection;
 import com.intellij.database.util.JdbcUtil;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -18,6 +19,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.UUID;
 
@@ -136,10 +139,17 @@ class CursorHandler implements Disposable {
   private void describeColumn(JsonWriter json, ResultSetMetaData metaData, int i) throws IOException, SQLException {
     json.beginObject();
     json.name("name").value(metaData.getColumnName(i + 1));
-    json.name("type").value("String"); //todo: metaData.getColumnClassName(i + 1)
+    json.name("type").value(getType(metaData.getColumnType(i + 1)));
     json.name("precision").value(metaData.getPrecision(i + 1));
     json.name("scale").value(metaData.getScale(i + 1));
     json.endObject();
+  }
+
+  private String getType(int type) {
+    if (JdbcUtil.isNumberType(type)) return "N";
+    if (JdbcUtil.isStringType(type)) return "S";
+    if (JdbcUtil.isDateTimeType(type)) return "D";
+    return "B";
   }
 
   private String processFetch(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
@@ -223,8 +233,29 @@ class CursorHandler implements Disposable {
       else throw new AssertionError("Unexpected: " + name);
     }
     json.endObject();
-    //todo:
-    return val;
+    return parseParam(val, type);
+  }
+
+  private Object parseParam(String val, String type) {
+    if (type == null || val == null || "S".equals(type) || "B".equals(type)) return val;
+    if ("N".equals(type)) {
+      boolean fl = StringUtil.containsAnyChar(val, ".,ef");
+      try {
+        return fl ? Double.parseDouble(val) : Integer.parseInt(val);
+      }
+      catch (NumberFormatException e) {
+        return val;
+      }
+    }
+    if ("D".equals(type)) {
+      try {
+        return LocalDateTime.parse(val);
+      }
+      catch (DateTimeParseException e) {
+        return val;
+      }
+    }
+    return null;
   }
 
   @Override

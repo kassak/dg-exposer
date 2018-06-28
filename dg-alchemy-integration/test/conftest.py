@@ -1,6 +1,5 @@
-from sqlalchemy.dialects import registry
+from .register import register
 
-registry.register("access", "intellij.alchemy.dgapi", "AccessDialect_dgapi")
-registry.register("access.dgapi", "intellij.alchemy.dgapi", "AccessDialect_dgapi")
+register()
 
 from sqlalchemy.testing.plugin.pytestplugin import *

@@ -1,11 +1,5 @@
 from setuptools import setup
 
-entry_points = {
-    'sqlalchemy.dialects': [
-        'access = intellij.alchemy.dgapi:AccessDialect_dgapi',
-        'access.pyodbc = intellij.alchemy.dgapi:AccessDialect_dgapi',
-    ]
-}
 setup(
     name='dg-alchemy-integration',
     version='0.0.1',
@@ -14,7 +8,12 @@ setup(
     license='MIT',
     packages=['intellij', 'intellij.alchemy'],
     install_requires=[
-        'dg-integration',
+        'dg-integration', 'sqlalchemy'
     ],
-    keywords='IntelliJ IDEA DataGrip PhpStorm PyCharm GoLand'
+    keywords='IntelliJ IDEA DataGrip PhpStorm PyCharm GoLand',
+    entry_points={
+        'sqlalchemy.dialects': [
+            'dg = intellij.alchemy.dgapi:DefaultDialect_dgapi',
+        ]
+    }
 )

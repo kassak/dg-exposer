@@ -58,6 +58,13 @@ class TestDBAPI(unittest.TestCase):
                 self.assertIsNotNone(cur.description)
                 self.assertEqual(['m', 'p'], [p[0] for p in cur.description])
 
+    def test_commit2(self):
+        inst = any_instance()
+        inst.noisy = True
+        with connect(dsn='identifier.sqlite', inst=inst) as c:
+            c.commit()
+            c.commit()
+
 
 
 if __name__ == '__main__':

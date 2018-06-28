@@ -131,7 +131,7 @@ class ConnectionHandler implements Disposable {
       return reportOk(request, context);
     }
     catch (SQLException e) {
-      return sendError(e, request, context);
+      return sendError(e, request, context, "O");
     }
   }
 
@@ -141,7 +141,7 @@ class ConnectionHandler implements Disposable {
       return reportOk(request, context);
     }
     catch (SQLException e) {
-      return sendError(e, request, context);
+      return sendError(e, request, context, "O");
     }
   }
 

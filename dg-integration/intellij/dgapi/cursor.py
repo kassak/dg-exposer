@@ -1,4 +1,7 @@
-from intellij.dgapi.exceptions import Error, DatabaseError
+from datetime import date, time, datetime
+from numbers import Number
+
+from intellij.dgapi.exceptions import Error, DatabaseError, OperationalError
 from intellij.dgapi.types import *
 
 
@@ -56,6 +59,10 @@ class Cursor(object):
     def execute(self, operation, parameters=(), **kwargs):
         if operation is None:
             raise Error('Operation should not be None')
+        if 'commit' == operation:
+            self._con.commit()
+            self._last_rc = -1
+            return
         res = self._execute(operation, parameters)
         self._last_rc = res['rowcount']
 
@@ -72,7 +79,7 @@ class Cursor(object):
 
     def _fetch(self, limit):
         self._ensure_desc()
-        return _deserialize_rows(_handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)))
+        return _deserialize_rows(_handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)), self.description)
 
     def fetchone(self):
         res = self._fetch(1)
@@ -106,25 +113,40 @@ class Cursor(object):
         return self
 
 
-def _format_parameters(params):
-    return [
-        {'value': p, 'type': 'S'}
-        for p in params
-    ]
-
-
 def _handle_error(data):
     if 'error' in data:
+        kind = data.get('kind')
+        if kind == 'O':
+            raise OperationalError(data['error'])
         raise DatabaseError(data['error'])
     return data
 
 
-def _deserialize_rows(rows):
-    return [_deserialize_row(r) for r in rows]
+def _deserialize_rows(rows, desc):
+    return [_deserialize_row(r, desc) for r in rows]
 
 
-def _deserialize_row(row):
-    return row
+def _deserialize_row(row, desc):
+    return [_deserialize_val(v, d[1]) for v, d in zip(row, desc)]
+
+
+def _deserialize_val(val, t):
+    if val is None:
+        return val
+    if t == NUMBER:
+        try:
+            return float(val)  # todo
+        except:
+            return val
+
+    if t == BINARY:
+        return bytes(val)
+    if t == DATETIME:
+        try:
+            return datetime.fromisoformat(val)
+        except:
+            return val
+    return val
 
 
 def _parse_desc(desc):
@@ -139,6 +161,42 @@ def _parse_desc(desc):
     ) for d in desc] if desc else None
 
 
+def _format_parameters(params):
+    return [
+        _format_parameter(p)
+        for p in params
+    ]
+
+
+def _format_parameter(p):
+    tp = _guess_type(p)
+    return {'value': str(p), 'type': _get_type(tp)}
+
+
 def _parse_type(type):
-    # todo
+    global _types
+    return _types.get(type, STRING)
+
+
+def _get_type(code):
+    global _types
+    next((k for k, v in _types if v == code), 'S')
+
+
+def _guess_type(val):
+    if isinstance(val, Number):
+        return NUMBER
+    if isinstance(val, date) or isinstance(val, datetime) or isinstance(val, time):
+        return DATETIME
+    if isinstance(val, bytes):
+        return BINARY
     return STRING
+
+
+_types = {
+    'S': STRING,
+    'N': NUMBER,
+    'D': DATETIME,
+    'R': ROWID,
+    'B': BINARY,
+}
