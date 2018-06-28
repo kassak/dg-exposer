@@ -18,6 +18,10 @@ class Cursor(object):
         self._close()
 
     @property
+    def connection(self):
+        return self._con
+
+    @property
     def description(self):
         if self._desc is None:
             self._desc = _parse_desc(_handle_error(self._dg.describe(self._con._ds, self._con._con, self._cursor)))
@@ -86,6 +90,15 @@ class Cursor(object):
 
     def setoutputsizes(self, sizes, column=None):
         pass
+
+    def next(self):
+        val = self.fetchone()
+        if val is None:
+            raise StopIteration()
+        return val
+
+    def __iter__(self):
+        return self
 
 
 def _format_parameters(params):
