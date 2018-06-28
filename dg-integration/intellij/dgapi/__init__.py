@@ -1,4 +1,5 @@
 from intellij.dgapi.exceptions import *
+from intellij.dgapi.types import *
 
 apilevel = "2.0"
 threadsafety = 0

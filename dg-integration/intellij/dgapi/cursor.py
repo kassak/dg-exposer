@@ -1,4 +1,5 @@
-from intellij.dgapi import Error, DatabaseError
+from intellij.dgapi.exceptions import Error, DatabaseError
+from intellij.dgapi.types import *
 
 
 # noinspection PyProtectedMember
@@ -135,4 +136,5 @@ def _parse_desc(desc):
 
 
 def _parse_type(type):
-    return type
+    # todo
+    return STRING
