@@ -196,6 +196,7 @@ class CursorHandler implements Disposable {
       json.endArray();
       ++count;
     }
+    if (!myHasData && myResultSet != null) cleanupResultSet();
     json.endArray();
   }
 
