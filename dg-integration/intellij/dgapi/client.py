@@ -3,7 +3,6 @@ import json
 
 class DGClient(object):
     def __init__(self, client):
-        client.noisy = True
         self._c = client
 
     def data_sources(self):

@@ -1,8 +1,10 @@
 import unittest
 
-import intellij.alchemy
+__import__('intellij.alchemy')
 from sqlalchemy import create_engine
+from intellij.discover import any_instance
 
+any_instance().noisy = True
 
 class TestDialect(unittest.TestCase):
     def test_simple(self):
