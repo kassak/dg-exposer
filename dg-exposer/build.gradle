@@ -25,8 +25,7 @@ allprojects {
   apply plugin: 'org.jetbrains.intellij'
   intellij {
     pluginName 'dg-exposer'
-    //version 'IU-182.3458.5'
-    localPath '/home/kassak/.local/opt/idea-IU-current'
+    localPath project.properties.get("local.idea")
     type 'IU'
     plugins 'DatabaseTools'
   }

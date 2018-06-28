@@ -74,6 +74,5 @@ class TestDBAPI(unittest.TestCase):
                 self.assertIsInstance(cur.fetchone()[0], datetime.datetime)
 
 
-
 if __name__ == '__main__':
     unittest.main()
