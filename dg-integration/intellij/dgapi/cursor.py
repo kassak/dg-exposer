@@ -74,10 +74,9 @@ class Cursor(object):
         return self._fetch(None)
 
     def nextset(self):
-        if self._stmt is None:
-            raise Error("No statement")
-        self._cleanup_rs()
-        # todo
+        res = _handle_error(self._dg.nextset(self._con._ds, self._con._con, self._cursor))
+        more = res['more'] if 'more' in res else False
+        return True if more else None
 
     def setinputsizes(self, sizes):
         pass

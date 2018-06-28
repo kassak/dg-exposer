@@ -48,6 +48,7 @@ class CursorHandler implements Disposable {
   String processCursor(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
     if (equal(urlDecoder, base, "execute")) return request.method() == HttpMethod.POST ? processExecute(request, context) : badRequest(request, context);
     if (equal(urlDecoder, base, "fetch")) return request.method() == HttpMethod.GET ? processFetch(urlDecoder, request, context) : badRequest(request, context);
+    if (equal(urlDecoder, base, "nextSet")) return request.method() == HttpMethod.POST ? processNextSet(request, context) : badRequest(request, context);
     return badRequest(request, context);
   }
 
@@ -70,11 +71,32 @@ class CursorHandler implements Disposable {
         myStatement.setObject(i + 1, params.get(i));
       }
       int count = myStatement.execute() ? -1 : myStatement.getUpdateCount();
-      myResultSet = myStatement.getResultSet();
-      myHasData = true;
+      storeResultSet();
       return sendJson(json -> {
         json.beginObject();
         json.name("rowcount").value(count);
+        json.endObject();
+      }, request, context);
+    }
+    catch (SQLException e) {
+      return sendError(e, request, context);
+    }
+  }
+
+  private void storeResultSet() throws SQLException {
+    myResultSet = myStatement.getResultSet();
+    myHasData = true;
+  }
+
+  private String processNextSet(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    if (myResultSet == null) return badRequest(request, context);
+    cleanupResultSet();
+    try {
+      boolean more = myStatement.getMoreResults();
+      if (more) storeResultSet();
+      return sendJson(json -> {
+        json.beginObject();
+        json.name("more").value(more);
         json.endObject();
       }, request, context);
     }

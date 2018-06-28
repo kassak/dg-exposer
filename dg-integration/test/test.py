@@ -40,6 +40,15 @@ class TestDBAPI(unittest.TestCase):
                 self.assertEqual([['mama'], ['papa']], cur.fetchall())
                 self.assertEqual([], cur.fetchall())
 
+    def test_nextset(self):
+        inst = any_instance()
+        inst.noisy = True
+        with connect(dsn='identifier.sqlite', inst=inst) as c:
+            with c.cursor() as cur:
+                cur.execute('select ?, ?', ('mama', 'papa'))
+                self.assertIsNone(cur.nextset())
+
+
 
 if __name__ == '__main__':
     unittest.main()

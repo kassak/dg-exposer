@@ -60,6 +60,11 @@ class DGClient(object):
                              limit=limit)
         return self._perform(r)
 
+    def nextset(self, ds, con, cur):
+        r = self._mk_request("database/dataSources/{0}/connections/{1}/cursors/{2}/nextSet", ds, con, cur)
+        r.method = "POST"
+        return self._perform(r)
+
     def _perform(self, r):
         return self._c.perform_json(r)
 
