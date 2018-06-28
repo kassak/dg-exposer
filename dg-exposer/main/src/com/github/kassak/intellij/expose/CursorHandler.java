@@ -15,10 +15,7 @@ import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
+import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -146,7 +143,7 @@ class CursorHandler implements Disposable {
   }
 
   private String getType(int type) {
-    if (JdbcUtil.isNumberType(type)) return "N";
+    if (JdbcUtil.isNumberType(type) || type == Types.SMALLINT) return "N";
     if (JdbcUtil.isStringType(type)) return "S";
     if (JdbcUtil.isDateTimeType(type)) return "D";
     return "B";

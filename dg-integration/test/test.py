@@ -65,6 +65,14 @@ class TestDBAPI(unittest.TestCase):
             c.commit()
             c.commit()
 
+    def test_type(self):
+        inst = any_instance()
+        inst.noisy = True
+        with connect(dsn='pg', inst=inst) as c:
+            with c.cursor() as cur:
+                cur.execute('select now()')
+                self.assertIsInstance(cur.fetchone()[0], datetime.datetime)
+
 
 
 if __name__ == '__main__':

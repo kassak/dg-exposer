@@ -1,6 +1,8 @@
 from datetime import date, time, datetime
 from numbers import Number
 
+import dateutil.parser
+
 from intellij.dgapi.exceptions import Error, DatabaseError, OperationalError
 from intellij.dgapi.types import *
 
@@ -140,10 +142,10 @@ def _deserialize_val(val, t):
             return val
 
     if t == BINARY:
-        return bytes(val)
+        return bytes(val, 'latin1')
     if t == DATETIME:
         try:
-            return datetime.fromisoformat(val)
+            return dateutil.parser.parse(val)
         except:
             return val
     return val
