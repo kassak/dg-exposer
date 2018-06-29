@@ -34,7 +34,7 @@ class Cursor(object):
 
     def _ensure_desc(self):
         if self._desc is None:
-            self._desc = _parse_desc(_handle_error(self._dg.describe(self._con._ds, self._con._con, self._cursor)))
+            self._desc = _parse_desc(self._handle_error(self._dg.describe(self._con._ds, self._con._con, self._cursor)))
 
     @property
     def rowcount(self):
@@ -76,12 +76,12 @@ class Cursor(object):
 
     def _execute(self, operation, parameters):
         self._desc = None
-        return _handle_error(self._dg.execute(self._con._ds, self._con._con, self._cursor, operation,
+        return self._handle_error(self._dg.execute(self._con._ds, self._con._con, self._cursor, operation,
                                               _format_parameters(parameters)))
 
     def _fetch(self, limit):
         self._ensure_desc()
-        return _deserialize_rows(_handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)), self.description)
+        return _deserialize_rows(self._handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)), self.description)
 
     def fetchone(self):
         res = self._fetch(1)
@@ -95,7 +95,7 @@ class Cursor(object):
 
     def nextset(self):
         self._desc = None
-        res = _handle_error(self._dg.nextset(self._con._ds, self._con._con, self._cursor))
+        res = self._handle_error(self._dg.nextset(self._con._ds, self._con._con, self._cursor))
         more = res['more'] if 'more' in res else False
         return True if more else None
 
@@ -114,13 +114,19 @@ class Cursor(object):
     def __iter__(self):
         return self
 
+    def _handle_error(self, data):
+        return _handle_error(data, self._dg._c.noisy)
 
-def _handle_error(data):
+
+def _handle_error(data, noisy):
     if 'error' in data:
+        e = data['error']
         kind = data.get('kind')
+        if noisy and 'trace' in data:
+            print(data['trace'])
         if kind == 'O':
-            raise OperationalError(data['error'])
-        raise DatabaseError(data['error'])
+            raise OperationalError(e)
+        raise DatabaseError(e)
     return data
 
 

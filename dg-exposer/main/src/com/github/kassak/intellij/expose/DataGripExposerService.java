@@ -130,17 +130,18 @@ public class DataGripExposerService extends RestService {
   }
 
   static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) throws IOException {
-    return sendError(ExceptionUtil.getThrowableText(e), request, context, kind);
+    return sendError(e.getMessage(), e, request, context, kind);
   }
 
   static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
     return sendError(e, request, context, null);
   }
 
-  static String sendError(@NotNull String msg, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) throws IOException {
+  static String sendError(@NotNull String msg, @Nullable Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) throws IOException {
     return sendJson(json -> {
       json.beginObject();
       json.name("error").value(msg);
+      if (e != null) json.name("trace").value(ExceptionUtil.getThrowableText(e));
       if (kind != null) json.name("kind").value(kind);
       json.endObject();
     }, request, context);

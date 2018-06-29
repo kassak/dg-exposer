@@ -56,10 +56,10 @@ class Connection(object):
         self._close()
 
     def commit(self):
-        _handle_error(self._dg.commit(self._ds, self._con))
+        self._handle_error(self._dg.commit(self._ds, self._con))
 
     def rollback(self):
-        _handle_error(self._dg.rollback(self._ds, self._con))
+        self._handle_error(self._dg.rollback(self._ds, self._con))
 
     def cursor(self):
         cur = self._dg.create_cursor(self._ds, self._con)
@@ -72,3 +72,6 @@ class Connection(object):
         if self._con is not None:
             self._dg.close_connection(self._ds, self._con)
             self._con = None
+
+    def _handle_error(self, data):
+        return _handle_error(data, self._dg._c.noisy)
