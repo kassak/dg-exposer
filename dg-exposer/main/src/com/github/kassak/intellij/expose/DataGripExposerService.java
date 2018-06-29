@@ -4,26 +4,46 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.intellij.database.dataSource.DataSourceStorage;
 import com.intellij.database.dataSource.LocalDataSource;
+import com.intellij.ide.DataManager;
+import com.intellij.notification.NotificationGroup;
+import com.intellij.notification.NotificationType;
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.ActionPlaces;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.ex.ActionUtil;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.project.ProjectManagerListener;
 import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.ThrowableConsumer;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
+import com.intellij.util.messages.MessageBusConnection;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.ide.RestService;
 
+import javax.swing.event.HyperlinkEvent;
 import java.io.IOException;
 
 public class DataGripExposerService extends RestService {
   private static final Logger LOG = Logger.getInstance(DataGripExposerService.class);
   private static final String SERVICE_NAME = "database";
   private static final String SERVICE_PREFIX = "/" + PREFIX + "/" + SERVICE_NAME + "/";
+  private static final NotificationGroup NOTIFICATION_GROUP = NotificationGroup.balloonGroup("DataGrip Exposer");
+  private static final String REQUESTS_PROP = "ide.rest.api.requests.per.minute";
+
+  public DataGripExposerService() {
+    checkRequests();
+  }
 
   @NotNull
   @Override
@@ -60,8 +80,8 @@ public class DataGripExposerService extends RestService {
   @NotNull
   static JBIterable<LocalDataSource> getAllDataSources() {
     return getAllProjects()
-            .flatten(p -> JBIterable.from(DataSourceStorage.getProjectStorage(p).getDataSources()).filter(ds -> !ds.isGlobal()))
-            .append(DataSourceStorage.getStorage().getDataSources());
+      .flatten(p -> JBIterable.from(DataSourceStorage.getProjectStorage(p).getDataSources()).filter(ds -> !ds.isGlobal()))
+      .append(DataSourceStorage.getStorage().getDataSources());
   }
 
   @NotNull
@@ -146,5 +166,52 @@ public class DataGripExposerService extends RestService {
   static String extractItem(@NotNull QueryStringDecoder urlDecoder, int offs) {
     int i = urlDecoder.path().indexOf('/', offs);
     return i != -1 ? urlDecoder.path().substring(offs, i) : null;
+  }
+
+
+  private void checkRequests() {
+    int req = Registry.intValue(REQUESTS_PROP, 30);
+    if (req >= 300) return;
+    ProjectManager manager = ProjectManager.getInstance();
+    Project project = ContainerUtil.find(manager.getOpenProjects(), p -> !p.isDefault() && p.isInitialized() && p.isOpen());
+    if (project != null) {
+      notifySolution(project, req);
+    }
+    else {
+      MessageBusConnection connection = ApplicationManager.getApplication().getMessageBus().connect();
+      connection.subscribe(ProjectManager.TOPIC, new ProjectManagerListener() {
+        @Override
+        public void projectOpened(Project project) {
+          connection.disconnect();
+          notifySolution(project, req);
+        }
+      });
+    }
+
+  }
+
+  private void notifySolution(Project p, int req) {
+    NOTIFICATION_GROUP.createNotification(
+      "DataGrip Exposer",
+      "You have low limit of REST requests.\n" +
+        "Limit of " + req + " requests per minute is too low.\n" +
+        "You will experience problems with DB connectivity.\n" +
+        "Set to <a href='set'>300</a>\n" +
+        "<a href='edit'>Edit</a>",
+      NotificationType.ERROR,
+      (notification, event) -> {
+        if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+          if ("set".equals(event.getDescription())) {
+            Registry.get(REQUESTS_PROP).setValue(300);
+          } else {
+            AnAction showRegistry = ActionManager.getInstance().getAction("ShowRegistry");
+            if (showRegistry == null) return;
+            ActionUtil.performActionDumbAware(
+              showRegistry,
+              AnActionEvent.createFromDataContext(ActionPlaces.UNKNOWN, null, DataManager.getInstance().getDataContext()));
+          }
+        }
+      }
+    ).notify(p);
   }
 }
