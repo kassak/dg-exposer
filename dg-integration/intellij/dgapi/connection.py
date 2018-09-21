@@ -48,7 +48,7 @@ class Connection(object):
             raise InterfaceError("No data source coordinates provided")
         if self._ds is None:
             raise InterfaceError("No data source found")
-        self._con = self._dg.connect(self._ds, autocommit=False)
+        self._con = self._handle_error(self._dg.connect(self._ds, autocommit=False))
 
     def close(self):
         if self._con is None:
@@ -62,7 +62,7 @@ class Connection(object):
         self._handle_error(self._dg.rollback(self._ds, self._con))
 
     def cursor(self):
-        cur = self._dg.create_cursor(self._ds, self._con)
+        cur = self._handle_error(self._dg.create_cursor(self._ds, self._con))
         return Cursor(self, cur)
 
     def __del__(self):
@@ -70,8 +70,9 @@ class Connection(object):
 
     def _close(self):
         if self._con is not None:
-            self._dg.close_connection(self._ds, self._con)
+            r = self._dg.close_connection(self._ds, self._con)
             self._con = None
+            self._handle_error(r)
 
     def _handle_error(self, data):
         return _handle_error(data, self._dg._c.noisy)

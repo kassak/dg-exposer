@@ -178,7 +178,8 @@ def _format_parameters(params):
 
 def _format_parameter(p):
     tp = _guess_type(p)
-    return {'value': str(p), 'type': _get_type(tp)}
+    tp2 = _get_type(tp)
+    return {'value': str(p), 'type': tp2}
 
 
 def _parse_type(type):
@@ -188,13 +189,13 @@ def _parse_type(type):
 
 def _get_type(code):
     global _types
-    next((k for k, v in _types if v == code), 'S')
+    return next((k for k, v in _types.items() if v == code), 'S')
 
 
 def _guess_type(val):
     if isinstance(val, Number):
         return NUMBER
-    if isinstance(val, date) or isinstance(val, datetime) or isinstance(val, time):
+    if isinstance(val, date) or isinstance(val, datetime.datetime) or isinstance(val, datetime.time):
         return DATETIME
     if isinstance(val, bytes):
         return BINARY

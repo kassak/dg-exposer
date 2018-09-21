@@ -1,10 +1,14 @@
 package com.github.kassak.intellij.expose;
 
+import com.github.kassak.intellij.expose.counterpart.DGCursor;
 import com.google.gson.stream.JsonWriter;
-import com.intellij.database.dataSource.DatabaseConnection;
-import com.intellij.database.dataSource.DatabaseConnectionManager;
-import com.intellij.database.util.GuardedRef;
-import com.intellij.openapi.Disposable;
+import com.intellij.database.DataBus;
+import com.intellij.database.SimpleRequestBroker;
+import com.intellij.database.console.JdbcEngine;
+import com.intellij.database.dataSource.LocalDataSource;
+import com.intellij.database.datagrid.DataRequest;
+import com.intellij.database.run.TxMarkerAuditor;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.util.containers.ContainerUtil;
 import io.netty.channel.ChannelHandlerContext;
@@ -12,6 +16,7 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -21,14 +26,52 @@ import java.util.UUID;
 
 import static com.github.kassak.intellij.expose.DataGripExposerService.*;
 
-class ConnectionHandler implements Disposable {
+class ConnectionHandler implements DataRequest.OwnerEx, TxMarkerAuditor.TxMarkerHolder {
   private final UUID myUuid;
-  private final GuardedRef<DatabaseConnection> myConnection;
+  private final JdbcEngine myEngine;
   private final Map<String, CursorHandler> myCursors = ContainerUtil.newHashMap();
+  private final SimpleRequestBroker myBroker;
+  private DataRequest.TxMarker myTxMarker = DataRequest.NONE;
 
-  ConnectionHandler(GuardedRef<DatabaseConnection> myConnection) {
+  ConnectionHandler(@NotNull Project project, @NotNull LocalDataSource dataSource) {
     myUuid = UUID.randomUUID();
-    this.myConnection = myConnection;
+    myBroker = SimpleRequestBroker.newInstance(project, getDisplayName());
+    myBroker.addAuditor(new TxMarkerAuditor(this));
+    myEngine = createConnectionImpl(project, dataSource);
+    Disposer.register(this, myEngine);
+  }
+
+  @NotNull
+  private JdbcEngine createConnectionImpl(@NotNull Project project, @NotNull LocalDataSource dataSource) {
+    JdbcEngine engine = new JdbcEngine(project, DataBus.shortCircuit(this.getMessageBus()), dataSource, null, this::getDisplayName);
+    return engine;
+  }
+
+  @Override
+  public DataBus.Consuming getMessageBus() {
+    return myBroker;
+  }
+
+  @NotNull
+  @Override
+  public DataRequest.TxMarker getCurrentTx() {
+    return myTxMarker;
+  }
+
+  @Override
+  public void setCurrentTx(@NotNull DataRequest.TxMarker txMarker) {
+    myTxMarker = txMarker;
+  }
+
+  @Override
+  public void setAutoCommit(boolean b) {
+    throw new UnsupportedOperationException("not supported");
+  }
+
+  @NotNull
+  @Override
+  public String getDisplayName() {
+    return "DG exposer";
   }
 
   void descConnection(JsonWriter json) throws IOException {
@@ -42,8 +85,8 @@ class ConnectionHandler implements Disposable {
     return myUuid;
   }
 
-  DatabaseConnection getConnection() {
-    return myConnection.get();
+  JdbcEngine getConnection() {
+    return myEngine;
   }
 
   String processConnection(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
@@ -116,7 +159,7 @@ class ConnectionHandler implements Disposable {
   }
 
   private CursorHandler createCursor() throws SQLException {
-    CursorHandler handler = new CursorHandler(getConnection());
+    CursorHandler handler = new CursorHandler(new DGCursor(this, myEngine));
     Disposer.register(this, handler);
     synchronized (myCursors) {
       myCursors.put(handler.getUuid().toString(), handler);
@@ -125,30 +168,23 @@ class ConnectionHandler implements Disposable {
   }
 
 
-  private String processCommit(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    try {
-      myConnection.get().commit();
-      return reportOk(request, context);
-    }
-    catch (SQLException e) {
-      return sendError(e, request, context, "O");
-    }
+  private String processCommit(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
+    return processSimpleRequest(request, context, DataRequest.newTxCommit(this));
   }
 
-  private String processRollback(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    try {
-      myConnection.get().rollback();
-      return reportOk(request, context);
-    }
-    catch (SQLException e) {
-      return sendError(e, request, context, "O");
-    }
+  @Nullable
+  private String processSimpleRequest(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, DataRequest req) {
+    req.getPromise().onSuccess(e -> reportOk(request, context));
+    req.getPromise().onError(e -> sendError(e, request, context, "O"));
+    myBroker.getDataProducer().processRequest(req);
+    return null;
+  }
+
+  private String processRollback(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
+    return processSimpleRequest(request, context, DataRequest.newTxRollback(this));
   }
 
   @Override
   public void dispose() {
-    if (DatabaseConnectionManager.getInstance().getActiveConnections().contains(getConnection())) {
-      myConnection.close();
-    }
   }
 }

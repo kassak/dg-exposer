@@ -72,7 +72,15 @@ class DGClient(object):
         return self._perform(r)
 
     def _perform(self, r):
-        return self._c.perform_json(r)
+        from urllib.error import HTTPError
+        from .exceptions import OperationalError
+        try:
+            res = self._c.perform_json(r)
+        except HTTPError as e:
+            raise OperationalError(e)
+        if self._c.noisy:
+            print(res)
+        return res
 
     def _mk_request(self, s, *objs, **kwargs):
         url = s.format(*[o['uuid'] for o in objs])

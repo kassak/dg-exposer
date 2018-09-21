@@ -22,6 +22,15 @@ class TestDBAPI(unittest.TestCase):
                 self.assertEqual(['mama', 'papa'], cur.fetchone())
                 self.assertIsNone(cur.fetchone())
 
+    def test_fetch_one_1(self):
+        inst = any_instance()
+        inst.noisy = True
+        with connect(dsn='identifier.sqlite', inst=inst) as c:
+            with c.cursor() as cur:
+                cur.execute('select \'mama\', \'papa\'')
+                self.assertEqual(['mama', 'papa'], cur.fetchone())
+                self.assertIsNone(cur.fetchone())
+
     def test_fetch_one_2(self):
         inst = any_instance()
         inst.noisy = True

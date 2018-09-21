@@ -1,9 +1,13 @@
 package com.github.kassak.intellij.expose;
 
 import com.google.gson.stream.JsonWriter;
+import com.intellij.database.DataBus;
+import com.intellij.database.SimpleRequestBroker;
+import com.intellij.database.console.JdbcEngine;
 import com.intellij.database.dataSource.DatabaseConnection;
 import com.intellij.database.dataSource.DatabaseConnectionManager;
 import com.intellij.database.dataSource.LocalDataSource;
+import com.intellij.database.datagrid.DataRequest;
 import com.intellij.database.util.GuardedRef;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
@@ -15,6 +19,7 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -32,20 +37,20 @@ class DataSourceHandler implements Disposable {
   public DataSourceHandler(@NotNull Project project, @NotNull LocalDataSource dataSource) {
     myProject = project;
     myDataSource = dataSource;
-    ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(DatabaseConnectionManager.TOPIC, (c, add) -> {
-      if (!add) {
-        synchronized (myConnections) {
-          Iterator<Map.Entry<String, ConnectionHandler>> it = myConnections.entrySet().iterator();
-          while (it.hasNext()) {
-            Map.Entry<String, ConnectionHandler> e = it.next();
-            if (e.getValue().getConnection() == c) {
-              it.remove();
-              Disposer.dispose(e.getValue());
-            }
-          }
-        }
-      }
-    });
+//    ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(DatabaseConnectionManager.TOPIC, (c, add) -> {
+//      if (!add) {
+//        synchronized (myConnections) {
+//          Iterator<Map.Entry<String, ConnectionHandler>> it = myConnections.entrySet().iterator();
+//          while (it.hasNext()) {
+//            Map.Entry<String, ConnectionHandler> e = it.next();
+//            if (e.getValue().getConnection() == c) {
+//              it.remove();
+//              Disposer.dispose(e.getValue());
+//            }
+//          }
+//        }
+//      }
+//    });
   }
 
   @Override
@@ -84,32 +89,24 @@ class DataSourceHandler implements Disposable {
     return handler.processConnection(urlDecoder, request, context, base);
   }
 
-  static String descDataSource(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull LocalDataSource dataSource) throws IOException {
+  static String descDataSource(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull LocalDataSource dataSource) {
     return sendJson(json -> descDataSource(json, dataSource), request, context);
   }
 
-  private String processCreateConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+  private String processCreateConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
     try {
       ConnectionHandler handler = createConnection();
       if (handler == null) return badRequest(request, context);
       sendJson(handler::descConnection, request, context);
       return null;
     }
-    catch (SQLException e) {
+    catch (Exception e) {
       return sendError(e, request, context);
     }
   }
 
-  private ConnectionHandler createConnection() throws SQLException {
-    GuardedRef<DatabaseConnection> c;
-    c = DatabaseConnectionManager.getInstance().build(myProject == null ? getAnyProjects() : myProject, myDataSource).create();
-    if (c == null) return null;
-    try { //todo:
-      c.get().setAutoCommit(false);
-    }
-    catch (SQLException ignored) {
-    }
-    ConnectionHandler handler = new ConnectionHandler(c);
+  private ConnectionHandler createConnection() {
+    ConnectionHandler handler = new ConnectionHandler(getAnyProjects(), myDataSource);
     Disposer.register(this, handler);
     synchronized (myConnections) {
       myConnections.put(handler.getUuid().toString(), handler);
@@ -117,7 +114,7 @@ class DataSourceHandler implements Disposable {
     return handler;
   }
 
-  private String processCloseConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull String connectionId) throws IOException {
+  private String processCloseConnection(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @NotNull String connectionId) {
     ConnectionHandler handler;
     synchronized (myConnections) {
       handler = myConnections.remove(connectionId);
@@ -127,7 +124,7 @@ class DataSourceHandler implements Disposable {
     return reportOk(request, context);
   }
 
-  private String processDescConnections(FullHttpRequest request, ChannelHandlerContext context) throws IOException {
+  private String processDescConnections(FullHttpRequest request, ChannelHandlerContext context) {
     List<ConnectionHandler> connections;
     synchronized (myConnections) {
       connections = ContainerUtil.newArrayList(myConnections.values());

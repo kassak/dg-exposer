@@ -35,7 +35,7 @@ import javax.swing.event.HyperlinkEvent;
 import java.io.IOException;
 
 public class DataGripExposerService extends RestService {
-  private static final Logger LOG = Logger.getInstance(DataGripExposerService.class);
+  static final Logger LOG = Logger.getInstance(DataGripExposerService.class);
   private static final String SERVICE_NAME = "database";
   private static final String SERVICE_PREFIX = "/" + PREFIX + "/" + SERVICE_NAME + "/";
   private static final NotificationGroup NOTIFICATION_GROUP = NotificationGroup.balloonGroup("DataGrip Exposer");
@@ -103,16 +103,22 @@ public class DataGripExposerService extends RestService {
     }
   }
 
-  static String sendJson(@NotNull ThrowableConsumer<JsonWriter, IOException> writer, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    BufferExposingByteArrayOutputStream byteOut = new BufferExposingByteArrayOutputStream();
-    try (JsonWriter json = createJsonWriter(byteOut)) {
-      writer.consume(json);
+  static String sendJson(@NotNull ThrowableConsumer<JsonWriter, IOException> writer, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
+    try {
+      BufferExposingByteArrayOutputStream byteOut = new BufferExposingByteArrayOutputStream();
+      try (JsonWriter json = createJsonWriter(byteOut)) {
+        writer.consume(json);
+      }
+      send(byteOut, request, context);
     }
-    send(byteOut, request, context);
+    catch (Exception e) {
+      LOG.error(e);
+      sendStatus(HttpResponseStatus.INTERNAL_SERVER_ERROR, HttpUtil.isKeepAlive(request), context.channel());
+    }
     return null;
   }
 
-  static String reportOk(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+  static String reportOk(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
     return sendJson(jsonWriter -> {
       jsonWriter.beginObject();
       jsonWriter.endObject();
@@ -129,15 +135,15 @@ public class DataGripExposerService extends RestService {
     return null;
   }
 
-  static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) throws IOException {
+  static String sendError(@NotNull Throwable e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) {
     return sendError(e.getMessage(), e, request, context, kind);
   }
 
-  static String sendError(@NotNull Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+  static String sendError(@NotNull Throwable e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
     return sendError(e, request, context, null);
   }
 
-  static String sendError(@NotNull String msg, @Nullable Exception e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) throws IOException {
+  static String sendError(@NotNull String msg, @Nullable Throwable e, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, @Nullable String kind) {
     return sendJson(json -> {
       json.beginObject();
       json.name("error").value(msg);

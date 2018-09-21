@@ -1,10 +1,12 @@
 package com.github.kassak.intellij.expose;
 
+import com.github.kassak.intellij.expose.counterpart.DGCursor;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
-import com.intellij.database.dataSource.DatabaseConnection;
+import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.util.JdbcUtil;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -13,9 +15,10 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.concurrency.Promise;
 
 import java.io.IOException;
-import java.sql.*;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -25,14 +28,13 @@ import static com.github.kassak.intellij.expose.DataGripExposerService.*;
 
 class CursorHandler implements Disposable {
   private final UUID myUuid;
-  private final DatabaseConnection myConnection;
-  private PreparedStatement myStatement;
-  private ResultSet myResultSet;
+  private final DGCursor myCursor;
   private boolean myHasData;
 
-  CursorHandler(DatabaseConnection connection) {
+  CursorHandler(DGCursor cursor) {
     myUuid = UUID.randomUUID();
-    myConnection = connection;
+    myCursor = cursor;
+    Disposer.register(this, myCursor);
   }
 
   void descCursor(JsonWriter json) throws IOException {
@@ -58,87 +60,64 @@ class CursorHandler implements Disposable {
     Ref<String> query = Ref.create();
     List<Object> params = ContainerUtil.newArrayList();
     parseExecRequest(request, query, params);
-    try {
-      if (!query.isNull()) {
-        cleanup();
-        myStatement = myConnection.getJdbcConnection().prepareStatement(query.get());
-      }
-      else if (myStatement == null) {
-        return badRequest(request, context);
-      }
-      else {
-        cleanupResultSet();
-      }
-      for (int i = 0; i < params.size(); ++i) {
-        myStatement.setObject(i + 1, params.get(i));
-      }
-      int count = myStatement.execute() ? -1 : myStatement.getUpdateCount();
-      storeResultSet();
-      return sendJson(json -> {
-        json.beginObject();
-        json.name("rowcount").value(count);
-        json.endObject();
-      }, request, context);
-    }
-    catch (SQLException e) {
-      return sendError(e, request, context);
-    }
+    Promise<Void> promise = myCursor.execute(query.get(), params);
+    promise.onError(e -> sendError(e, request, context));
+    promise.onSuccess(ignore -> sendJson(json -> {
+      json.beginObject();
+      json.name("rowcount").value(-1);//todo
+      json.endObject();
+    }, request, context));
+    return null;
   }
 
-  private void storeResultSet() throws SQLException {
-    myResultSet = myStatement.getResultSet();
-    myHasData = true;
-  }
+//  private void storeResultSet() throws SQLException {
+//    myResultSet = myStatement.getResultSet();
+//    myHasData = true;
+//  }
 
   private String processNextSet(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    if (myResultSet == null) return badRequest(request, context);
-    cleanupResultSet();
-    try {
-      boolean more = myStatement.getMoreResults();
-      if (more) storeResultSet();
-      return sendJson(json -> {
-        json.beginObject();
-        json.name("more").value(more);
-        json.endObject();
-      }, request, context);
-    }
-    catch (SQLException e) {
-      return sendError(e, request, context);
-    }
+//    if (!myCursor.haveQuery()) return badRequest(request, context);
+//    cleanupResultSet();
+//    try {
+//      boolean more = myStatement.getMoreResults();
+//      if (more) storeResultSet();
+//      return sendJson(json -> {
+//        json.beginObject();
+//        json.name("more").value(more);
+//        json.endObject();
+//      }, request, context);
+//    }
+//    catch (SQLException e) {
+//      return sendError(e, request, context);
+//    }
+    return sendJson(json -> {
+      json.beginObject();
+      json.name("more").value(false);
+      json.endObject();
+    }, request, context);
   }
 
   private String processDescribe(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
-    try {
-      return sendJson(json -> {
-        try {
-          describe(json);
-        }
-        catch (SQLException e) {
-          throw new RuntimeException(e);
-        }
-      }, request, context);
-    }
-    catch (RuntimeException e) {
-      return sendError(e, request, context);
-    }
+    return sendJson(this::describe, request, context);
   }
 
-  private void describe(JsonWriter json) throws SQLException, IOException {
-    ResultSetMetaData metaData = myResultSet == null || myResultSet.isClosed() ? null : myResultSet.getMetaData();
+  private void describe(JsonWriter json) throws IOException {
+    List<DataConsumer.Column> columns = myCursor.getColumns();
     json.beginArray();
-    int count = metaData == null ? 0 : metaData.getColumnCount();
-    for (int i = 0; i < count; ++i) {
-      describeColumn(json, metaData, i);
+    if (columns != null) {
+      for (DataConsumer.Column column : columns) {
+        describeColumn(json, column);
+      }
     }
     json.endArray();
   }
 
-  private void describeColumn(JsonWriter json, ResultSetMetaData metaData, int i) throws IOException, SQLException {
+  private void describeColumn(JsonWriter json, DataConsumer.Column column) throws IOException {
     json.beginObject();
-    json.name("name").value(metaData.getColumnName(i + 1));
-    json.name("type").value(getType(metaData.getColumnType(i + 1)));
-    json.name("precision").value(metaData.getPrecision(i + 1));
-    json.name("scale").value(metaData.getScale(i + 1));
+    json.name("name").value(column.name);
+    json.name("type").value(getType(column.type));
+    json.name("precision").value(column.precision);
+    json.name("scale").value(column.scale);
     json.endObject();
   }
 
@@ -164,13 +143,13 @@ class CursorHandler implements Disposable {
   }
 
   private String processFetch(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int limit) throws IOException {
-    if (myResultSet == null) return badRequest(request, context);
+    if (!myCursor.haveQuery()) return badRequest(request, context);
     try {
       return sendJson(json -> {
         try {
           serializeResultSet(json, limit);
         }
-        catch (SQLException e) {
+        catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
       }, request, context);
@@ -180,25 +159,22 @@ class CursorHandler implements Disposable {
     }
   }
 
-  private void serializeResultSet(JsonWriter json, int limit) throws SQLException, IOException {
-    int count = 0;
-    int cols = -1;
+  private void serializeResultSet(JsonWriter json, int limit) throws IOException, InterruptedException {
     json.beginArray();
-    while ((limit == -1 || count < limit) && myHasData && (myHasData = myResultSet.next())) {
-      if (cols == -1) cols = myResultSet.getMetaData().getColumnCount();
+    List<DataConsumer.Row> rows = myCursor.fetch(limit);
+    if (limit == -1 || rows.size() < limit) myHasData = false;
+    for (DataConsumer.Row row : rows) {
       json.beginArray();
-      for (int i = 0; i < cols; ++i) {
-        serializeValue(json, i);
+      for (Object value : row.values) {
+        serializeValue(json, value);
       }
       json.endArray();
-      ++count;
     }
-    if (!myHasData && myResultSet != null) cleanupResultSet();
     json.endArray();
   }
 
-  private void serializeValue(JsonWriter json, int i) throws IOException, SQLException {
-    json.value(myResultSet.getString(i + 1));
+  private void serializeValue(JsonWriter json, Object value) throws IOException {
+    json.value(value == null ? null : value.toString());
   }
 
   private void parseExecRequest(@NotNull FullHttpRequest request, Ref<String> query, List<Object> params) throws IOException {
@@ -258,16 +234,5 @@ class CursorHandler implements Disposable {
 
   @Override
   public void dispose() {
-    cleanup();
-  }
-
-  private void cleanup() {
-    JdbcUtil.closeStatementSafe(myStatement);
-    myStatement = null;
-  }
-
-  private void cleanupResultSet() {
-    JdbcUtil.closeResultSetSafe(myResultSet);
-    myResultSet = null;
   }
 }
