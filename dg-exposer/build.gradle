@@ -28,9 +28,16 @@ allprojects {
     localPath project.properties.get("local.idea")
     alternativeIdePath project.properties.get("local.altIde")
     type 'IU'
-    plugins 'DatabaseTools'
+    plugins 'DatabaseTools', 'com.github.kassak.ij-advertiser:0.02.1'
   }
 
+  test {
+    testLogging {
+      outputs.upToDateWhen {false}
+      showStandardStreams = true
+    }
+  }
+  
   patchPluginXml {
     sinceBuild '182'
     untilBuild '192'
@@ -42,3 +49,4 @@ publishPlugin {
   password project.properties.get("publish.password")
   channels project.properties.get("publish.channel") ?: "Stable"
 }
+
