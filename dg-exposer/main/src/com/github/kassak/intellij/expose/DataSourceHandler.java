@@ -62,7 +62,7 @@ class DataSourceHandler implements Disposable {
     json.beginObject();
     json.name("uuid").value(dataSource.getUniqueId());
     json.name("name").value(dataSource.getName());
-    json.name("familyId").value(dataSource.getFamilyId().getName());
+    json.name("dbms").value(dataSource.getDbms().getName());
     json.endObject();
   }
 

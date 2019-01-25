@@ -43,7 +43,7 @@ class ConnectionHandler implements DataRequest.OwnerEx, TxMarkerAuditor.TxMarker
 
   @NotNull
   private JdbcEngine createConnectionImpl(@NotNull Project project, @NotNull LocalDataSource dataSource) {
-    JdbcEngine engine = new JdbcEngine(project, DataBus.shortCircuit(this.getMessageBus()), dataSource, null, this::getDisplayName);
+    JdbcEngine engine = new JdbcEngine(project, DataBus.shortCircuit(this.getMessageBus()), dataSource, null);
     return engine;
   }
 

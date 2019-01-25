@@ -1,14 +1,13 @@
 package com.github.kassak.intellij.expose.counterpart;
 
+import com.intellij.database.Dbms;
 import com.intellij.database.console.JdbcEngine;
 import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.datagrid.DataProducer;
 import com.intellij.database.datagrid.DataRequest;
-import com.intellij.database.dialects.DatabaseDialectEx;
 import com.intellij.database.dump.DumpRequest;
 import com.intellij.database.extractors.DataExtractor;
 import com.intellij.database.util.CharOut;
-import com.intellij.database.util.DbImplUtil;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.util.ArrayUtil;
@@ -43,10 +42,10 @@ public class DGCursor implements DataExtractor, Disposable {
     QueryData data = new QueryData();
     resetQueries(data);
     DumpRequest request = new DumpRequest(
-      myOwner, DataRequest.START_NEW, query,
+      myOwner, query,
       DataRequest.newConstraints(1, -1, 0),
       null, this,
-      DbImplUtil.getDatabaseDialect(myEngine.getDataSource()),
+      myEngine.getDataSource().getDbms(),
       data, null) {
     };
     request.getPromise().processed(data.query);
@@ -90,8 +89,7 @@ public class DGCursor implements DataExtractor, Disposable {
   }
 
   @Override
-  public Extraction startExtraction(CharOut out, DatabaseDialectEx dialect, boolean forceSkipHeader,
-                                    List<DataConsumer.Column> allColumns, int... selectedColumns) {
+  public Extraction startExtraction(CharOut out, Dbms dbms, boolean forceSkipHeader, List<DataConsumer.Column> allColumns, int... selectedColumns) {
     QueryData data = (QueryData)out;
     data.columns = allColumns;
     data.query.setResult(null);

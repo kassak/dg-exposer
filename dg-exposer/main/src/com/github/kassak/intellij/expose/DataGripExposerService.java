@@ -35,7 +35,7 @@ import javax.swing.event.HyperlinkEvent;
 import java.io.IOException;
 
 public class DataGripExposerService extends RestService {
-  static final Logger LOG = Logger.getInstance(DataGripExposerService.class);
+  private static final Logger LOG = Logger.getInstance(DataGripExposerService.class);
   private static final String SERVICE_NAME = "database";
   private static final String SERVICE_PREFIX = "/" + PREFIX + "/" + SERVICE_NAME + "/";
   private static final NotificationGroup NOTIFICATION_GROUP = NotificationGroup.balloonGroup("DataGrip Exposer");
@@ -188,7 +188,7 @@ public class DataGripExposerService extends RestService {
       MessageBusConnection connection = ApplicationManager.getApplication().getMessageBus().connect();
       connection.subscribe(ProjectManager.TOPIC, new ProjectManagerListener() {
         @Override
-        public void projectOpened(Project project) {
+        public void projectOpened(@NotNull Project project) {
           connection.disconnect();
           notifySolution(project, req);
         }
