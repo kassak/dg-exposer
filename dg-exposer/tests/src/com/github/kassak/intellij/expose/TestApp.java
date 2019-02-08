@@ -2,12 +2,12 @@ package com.github.kassak.intellij.expose;
 
 import com.intellij.database.dataSource.DataSourceStorage;
 import com.intellij.database.dataSource.LocalDataSource;
+import com.intellij.database.dataSource.LocalDataSource.Storage;
 import com.intellij.database.dataSource.validation.DatabaseDriverValidator;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.testFramework.PlatformTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.util.TimeoutUtil;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
@@ -44,11 +44,17 @@ public class TestApp extends PlatformTestCase {
     }, getTestRootDisposable());
     System.out.println("TestApp is running on port: " + BuiltInServerManager.getInstance().getPort());
     System.out.flush();
-    LocalDataSource ds = LocalDataSource.create("identifier.sqlite", null, /*"jdbc:sqlite:identifier.sqlite"*/"jdbc:h2:mem:db", null);
+    addDataSource("identifier.sqlite", "jdbc:sqlite:identifier.sqlite");
+    addDataSource("h2", "jdbc:h2:mem:db");
+    SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+    loop.enter();
+  }
+
+  private void addDataSource(String name, String url) {
+    LocalDataSource ds = LocalDataSource.create(name, null, url, null);
+    ds.setPasswordStorage(Storage.PERSIST);
     ds.resolveDriver();
     DatabaseDriverValidator.createDownloaderTask(ds, null).run(new EmptyProgressIndicator());
     DataSourceStorage.getProjectStorage(getProject()).addDataSource(ds);
-    SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
-    loop.enter();
   }
 }
