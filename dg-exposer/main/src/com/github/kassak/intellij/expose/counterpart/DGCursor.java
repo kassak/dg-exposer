@@ -1,17 +1,18 @@
 package com.github.kassak.intellij.expose.counterpart;
 
-import com.intellij.database.Dbms;
 import com.intellij.database.console.JdbcEngine;
+import com.intellij.database.datagrid.DataAuditor;
 import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.datagrid.DataProducer;
 import com.intellij.database.datagrid.DataRequest;
-import com.intellij.database.dump.DumpRequest;
-import com.intellij.database.extractors.DataExtractor;
-import com.intellij.database.util.CharOut;
+import com.intellij.database.datagrid.DataRequest.CallRequest.Statement;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
+import gnu.trove.TIntIntHashMap;
+import gnu.trove.TIntObjectHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.concurrency.AsyncPromise;
@@ -24,7 +25,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class DGCursor implements DataExtractor, Disposable {
+public class DGCursor implements Disposable {
   private final DataRequest.OwnerEx myOwner;
   private final JdbcEngine myEngine;
   private final AtomicReference<QueryData> myData = new AtomicReference<>();
@@ -39,15 +40,14 @@ public class DGCursor implements DataExtractor, Disposable {
     if (query == null) query = prevQuery;
     else prevQuery = query;
     if (query == null) return Promises.rejectedPromise("Empty query");
-    QueryData data = new QueryData();
+    TIntObjectHashMap<Object> p = new TIntObjectHashMap<>();
+    for (int i = 0; i < params.size(); i++) {
+      p.put(i + 1, params.get(i));
+    }
+
+    DataRequest request = DataRequest.newCallRequest(myOwner, Collections.singletonList(new Statement(query, new TIntIntHashMap(), p)), null);
+    QueryData data = new QueryData(request);
     resetQueries(data);
-    DumpRequest request = new DumpRequest(
-      myOwner, query,
-      DataRequest.newConstraints(1, -1, 0),
-      null, this,
-      myEngine.getDataSource().getDbms(),
-      data, null) {
-    };
     request.getPromise().processed(data.query);
     request.getPromise().onError(e -> data.poison());
     producer().processRequest(request);
@@ -56,12 +56,23 @@ public class DGCursor implements DataExtractor, Disposable {
 
   private void resetQueries(@Nullable QueryData data) {
     QueryData prev = myData.getAndSet(data);
+    if (data != null) {
+      myOwner.getMessageBus().addConsumer(data);
+      myOwner.getMessageBus().addAuditor(data);
+    }
     if (prev == null) return;
+    Disposer.dispose(prev);
     myEngine.cancelPendingRequests();
   }
 
   public boolean haveQuery() {
     return myData.get() != null;
+  }
+
+  @Nullable
+  public Throwable fetchError() {
+    QueryData data = myData.get();
+    return data == null ? null : data.fetchError();
   }
 
   @NotNull
@@ -82,58 +93,27 @@ public class DGCursor implements DataExtractor, Disposable {
     return myOwner.getMessageBus().getDataProducer();
   }
 
-  @NotNull
-  @Override
-  public String getFileExtension() {
-    return ".py";
-  }
-
-  @Override
-  public Extraction startExtraction(CharOut out, Dbms dbms, boolean forceSkipHeader, List<DataConsumer.Column> allColumns, int... selectedColumns) {
-    QueryData data = (QueryData)out;
-    data.columns = allColumns;
-    data.query.setResult(null);
-    return data;
-  }
-
   @Override
   public void dispose() {
     resetQueries(null);
   }
 
-  private static class QueryData implements CharOut, Extraction {
+  private static class QueryData extends DataAuditor.Adapter implements DataConsumer, Disposable {
+    final DataRequest request;
     final AsyncPromise<Void> query = new AsyncPromise<>();
+    final AtomicReference<Throwable> lastException = new AtomicReference<>();
     volatile List<DataConsumer.Column> columns;
 
     final BlockingQueue<DataConsumer.Row> buffer = new ArrayBlockingQueue<>(50);
     boolean finished;
 
-
-    @NotNull
-    @Override
-    public CharOut append(@NotNull CharSequence charSequence) {
-      return this;
-    }
-    @Override
-    public long length() {
-      return 0;
-    }
-    @Nullable
-    @Override
-    public <T> T tryCast(Class<T> aClass) {
-      return null;
+    private QueryData(DataRequest request) {
+      this.request = request;
     }
 
     @Override
-    public void addData(List<DataConsumer.Row> list) {
-      try {
-        for (DataConsumer.Row row : list) {
-          buffer.put(row);
-        }
-      }
-      catch (InterruptedException e) {
-        throw new ProcessCanceledException();
-      }
+    public void dispose() {
+
     }
 
     List<DataConsumer.Row> fetch(int limit) throws InterruptedException {
@@ -159,11 +139,6 @@ public class DGCursor implements DataExtractor, Disposable {
       }
     }
 
-    @Override
-    public void complete() {
-      poison();
-    }
-
     private void poison() {
       try {
         buffer.put(DataConsumer.Row.create(Integer.MIN_VALUE, ArrayUtil.EMPTY_OBJECT_ARRAY));
@@ -171,6 +146,42 @@ public class DGCursor implements DataExtractor, Disposable {
       catch (InterruptedException e) {
         throw new ProcessCanceledException();
       }
+    }
+
+    @Nullable
+    public Throwable fetchError() {
+      return lastException.getAndSet(null);
+    }
+
+    @Override
+    public void error(@NotNull DataRequest.Context context, @Nullable String message, @Nullable Throwable th) {
+      if (context.request != request) return;
+      lastException.set(message == null ? th : new RuntimeException(message, th));
+    }
+
+    @Override
+    public void setColumns(@NotNull DataRequest.Context context, int i, Column[] columns, int i1) {
+      if (context.request != request) return;
+      this.columns = ContainerUtil.newArrayList(columns);
+    }
+
+    @Override
+    public void addRows(@NotNull DataRequest.Context context, List<Row> list) {
+      if (context.request != request) return;
+      try {
+        for (DataConsumer.Row row : list) {
+          buffer.put(row);
+        }
+      }
+      catch (InterruptedException e) {
+        throw new ProcessCanceledException();
+      }
+    }
+
+    @Override
+    public void afterLastRowAdded(@NotNull DataRequest.Context context, int i) {
+      if (context.request != request) return;
+      poison();
     }
   }
 }

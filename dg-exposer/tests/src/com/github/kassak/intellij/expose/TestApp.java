@@ -2,6 +2,8 @@ package com.github.kassak.intellij.expose;
 
 import com.intellij.database.dataSource.DataSourceStorage;
 import com.intellij.database.dataSource.LocalDataSource;
+import com.intellij.database.dataSource.validation.DatabaseDriverValidator;
+import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.testFramework.PlatformTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
@@ -42,7 +44,9 @@ public class TestApp extends PlatformTestCase {
     }, getTestRootDisposable());
     System.out.println("TestApp is running on port: " + BuiltInServerManager.getInstance().getPort());
     System.out.flush();
-    LocalDataSource ds = new LocalDataSource("identifier.sqlite", "", "sqlite:identifier.sqlite", null, null);
+    LocalDataSource ds = LocalDataSource.create("identifier.sqlite", null, /*"jdbc:sqlite:identifier.sqlite"*/"jdbc:h2:mem:db", null);
+    ds.resolveDriver();
+    DatabaseDriverValidator.createDownloaderTask(ds, null).run(new EmptyProgressIndicator());
     DataSourceStorage.getProjectStorage(getProject()).addDataSource(ds);
     SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
     loop.enter();

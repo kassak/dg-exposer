@@ -2,6 +2,7 @@ import unittest
 from intellij.dgapi import *
 from intellij.discover import any_instance, create_instance, discover_running_instances, Client
 
+
 def find_test_app():
     insts = discover_running_instances()
     print(insts)
@@ -14,10 +15,12 @@ def find_test_app():
             print('Not test:', inst, e)
     return run_test_app()
 
+
 def run_test_app():
     trigger = 'TestApp is running on port: '
     import subprocess, os, atexit
-    proc = subprocess.Popen(['gradle', 'test'], cwd=os.path.relpath('../dg-exposer', os.path.abspath(__file__)), stdout=subprocess.PIPE)
+    proc = subprocess.Popen(['gradle', 'test'], cwd=os.path.relpath('../dg-exposer', os.path.abspath(__file__)),
+                            stdout=subprocess.PIPE)
     atexit.register(proc.terminate)
     for line in proc.stdout:
         line = line.decode("utf-8")
@@ -26,6 +29,7 @@ def run_test_app():
             port = int(line[idx + len(trigger):])
             print(trigger, port)
             return create_instance('127.0.0.1', port)
+
 
 class TestDBAPI(unittest.TestCase):
     _test_instance = find_test_app()

@@ -61,7 +61,11 @@ class CursorHandler implements Disposable {
     List<Object> params = ContainerUtil.newArrayList();
     parseExecRequest(request, query, params);
     Promise<Void> promise = myCursor.execute(query.get(), params);
-    promise.onError(e -> sendError(e, request, context));
+    promise.onError(e -> {
+      if (!reportError(request, context)) {
+        sendError(e, request, context);
+      }
+    });
     promise.onSuccess(ignore -> sendJson(json -> {
       json.beginObject();
       json.name("rowcount").value(-1);//todo
@@ -76,6 +80,7 @@ class CursorHandler implements Disposable {
 //  }
 
   private String processNextSet(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    if (reportError(request, context)) return null;
 //    if (!myCursor.haveQuery()) return badRequest(request, context);
 //    cleanupResultSet();
 //    try {
@@ -98,6 +103,7 @@ class CursorHandler implements Disposable {
   }
 
   private String processDescribe(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
+    if (reportError(request, context)) return null;
     return sendJson(this::describe, request, context);
   }
 
@@ -143,6 +149,7 @@ class CursorHandler implements Disposable {
   }
 
   private String processFetch(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int limit) throws IOException {
+    if (reportError(request, context)) return null;
     if (!myCursor.haveQuery()) return badRequest(request, context);
     try {
       return sendJson(json -> {
@@ -157,6 +164,13 @@ class CursorHandler implements Disposable {
     catch (RuntimeException e) {
       return sendError(e, request, context);
     }
+  }
+
+  private boolean reportError(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) {
+    Throwable err = myCursor.fetchError();
+    if (err == null) return false;
+    sendError(err, request, context);
+    return true;
   }
 
   private void serializeResultSet(JsonWriter json, int limit) throws IOException, InterruptedException {
