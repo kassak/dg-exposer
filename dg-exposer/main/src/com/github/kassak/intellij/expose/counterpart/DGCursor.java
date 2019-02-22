@@ -149,7 +149,7 @@ public class DGCursor implements Disposable {
     }
 
     @Nullable
-    public Throwable fetchError() {
+    Throwable fetchError() {
       return lastException.getAndSet(null);
     }
 

@@ -30,7 +30,7 @@ class Cursor(object):
     @property
     def description(self):
         self._ensure_desc()
-        return self._desc
+        return None if self._desc is None else [t[1] for t in self._desc]
 
     def _ensure_desc(self):
         if self._desc is None:
@@ -39,6 +39,10 @@ class Cursor(object):
     @property
     def rowcount(self):
         return self._last_rc
+
+    @property
+    def lastrowid(self):
+        return None
 
     # def callproc(self):
     #     pass
@@ -77,11 +81,12 @@ class Cursor(object):
     def _execute(self, operation, parameters):
         self._desc = None
         return self._handle_error(self._dg.execute(self._con._ds, self._con._con, self._cursor, operation,
-                                              _format_parameters(parameters)))
+                                                   _format_parameters(parameters)))
 
     def _fetch(self, limit):
         self._ensure_desc()
-        return _deserialize_rows(self._handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)), self.description)
+        return _deserialize_rows(self._handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)),
+                                 self.description)
 
     def fetchone(self):
         res = self._fetch(1)
@@ -135,26 +140,24 @@ def _deserialize_rows(rows, desc):
 
 
 def _deserialize_row(row, desc):
-    return [_deserialize_val(v, d[1]) for v, d in zip(row, desc)]
+    return [_deserialize_val(v, d) for v, d in zip(row, desc)]
 
 
 def _deserialize_val(val, t):
     if val is None:
         return val
-    if t == NUMBER:
-        try:
-            return float(val)  # todo
-        except:
-            return val
-
-    if t == BINARY:
-        return bytes(val, 'latin1')
-    if t == DATETIME:
-        try:
+    try:
+        if t == _I:
+            return int(val)
+        if t == _N:
+            return float(val)
+        if t == _B:
+            return bytes(val, 'latin1')
+        if t == _D:
             return dateutil.parser.parse(val)
-        except:
-            return val
-    return val
+        return val
+    except:
+        return val
 
 
 def _parse_desc(desc):
@@ -178,34 +181,31 @@ def _format_parameters(params):
 
 def _format_parameter(p):
     tp = _guess_type(p)
-    tp2 = _get_type(tp)
-    return {'value': str(p), 'type': tp2}
+    return {'value': None if p is None else str(p), 'type': tp[0]}
 
 
-def _parse_type(type):
+def _parse_type(code):
     global _types
-    return _types.get(type, STRING)
-
-
-def _get_type(code):
-    global _types
-    return next((k for k, v in _types.items() if v == code), 'S')
+    return next((t for t in _types if t[0] == code), _S)
 
 
 def _guess_type(val):
+    if isinstance(val, int):
+        return _I
     if isinstance(val, Number):
-        return NUMBER
+        return _N
     if isinstance(val, date) or isinstance(val, datetime.datetime) or isinstance(val, datetime.time):
-        return DATETIME
+        return _D
     if isinstance(val, bytes):
-        return BINARY
-    return STRING
+        return _B
+    return _S
 
 
-_types = {
-    'S': STRING,
-    'N': NUMBER,
-    'D': DATETIME,
-    'R': ROWID,
-    'B': BINARY,
-}
+_S = ('S', STRING)
+_N = ('N', NUMBER)
+_I = ('I', NUMBER)
+_D = ('D', DATETIME)
+_R = ('R', ROWID)
+_B = ('B', BINARY)
+
+_types = [_S, _N, _I, _D, _R, _B]

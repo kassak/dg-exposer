@@ -23,14 +23,17 @@ class TypeCode(object):
         return hash(self._code)
 
 
+# noinspection PyPep8Naming
 def DateFromTicks(ticks):
     return Date(*time.localtime(ticks)[:3])
 
 
+# noinspection PyPep8Naming
 def TimeFromTicks(ticks):
     return Time(*time.localtime(ticks)[3:6])
 
 
+# noinspection PyPep8Naming
 def TimestampFromTicks(ticks):
     return Timestamp(*time.localtime(ticks)[:6])
 

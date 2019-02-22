@@ -3,9 +3,6 @@ import unittest
 from intellij.discover import any_instance
 from sqlalchemy import create_engine
 
-from test.register import register
-
-register()
 any_instance().noisy = True
 
 

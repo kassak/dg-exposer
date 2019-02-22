@@ -17,8 +17,13 @@ class Requirements(SuiteRequirements):
 
     @property
     def table_reflection(self):
-        return exclusions.closed()
+        return exclusions.open()
 
     @property
     def returning(self):
-        return exclusions.open()
+        return exclusions.closed()
+
+    @property
+    def independent_connections(self):
+        return exclusions.closed()
+

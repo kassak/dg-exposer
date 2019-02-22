@@ -2,6 +2,7 @@ package com.github.kassak.intellij.expose;
 
 import com.github.kassak.intellij.expose.counterpart.DGCursor;
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.util.JdbcUtil;
@@ -15,9 +16,12 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.concurrency.Promise;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.sql.Types;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -59,7 +63,12 @@ class CursorHandler implements Disposable {
   private String processExecute(@NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
     Ref<String> query = Ref.create();
     List<Object> params = ContainerUtil.newArrayList();
-    parseExecRequest(request, query, params);
+    try {
+      parseExecRequest(request, query, params);
+    }
+    catch (Exception e) {
+      return sendError(e, request, context);
+    }
     Promise<Void> promise = myCursor.execute(query.get(), params);
     promise.onError(e -> {
       if (!reportError(request, context)) {
@@ -128,7 +137,8 @@ class CursorHandler implements Disposable {
   }
 
   private String getType(int type) {
-    if (JdbcUtil.isNumberType(type) || type == Types.SMALLINT) return "N";
+    if (type == Types.BIGINT || type == Types.INTEGER || type == Types.SMALLINT) return "I";
+    if (JdbcUtil.isNumberType(type)) return "N";
     if (JdbcUtil.isStringType(type)) return "S";
     if (JdbcUtil.isDateTimeType(type)) return "D";
     return "B";
@@ -215,7 +225,7 @@ class CursorHandler implements Disposable {
     json.beginObject();
     while (json.hasNext()) {
       String name = json.nextName();
-      String value = json.nextString();
+      String value = getOptString(json);
       if ("value".equals(name)) val = value;
       else if ("type".equals(name)) type = value;
       else throw new AssertionError("Unexpected: " + name);
@@ -224,26 +234,54 @@ class CursorHandler implements Disposable {
     return parseParam(val, type);
   }
 
+  private String getOptString(JsonReader json) throws IOException {
+    if (json.peek() != JsonToken.NULL) return json.nextString();
+    json.nextNull();
+    return null;
+  }
+
   private Object parseParam(String val, String type) {
     if (type == null || val == null || "S".equals(type) || "B".equals(type)) return val;
-    if ("N".equals(type)) {
-      boolean fl = StringUtil.containsAnyChar(val, ".,ef");
-      try {
-        return fl ? Double.parseDouble(val) : Integer.parseInt(val);
-      }
-      catch (NumberFormatException e) {
-        return val;
-      }
-    }
-    if ("D".equals(type)) {
-      try {
-        return LocalDateTime.parse(val);
-      }
-      catch (DateTimeParseException e) {
-        return val;
-      }
-    }
+    if ("I".equals(type)) return parseInt(val);
+    if ("N".equals(type)) return parseFloat(val);
+    if ("D".equals(type)) return parseDate(val);
     return null;
+  }
+
+  @Nullable
+  private Object parseDate(String val) {
+    try {
+      return LocalDateTime.parse(val);
+    }
+    catch (DateTimeParseException e) {
+      return val;
+    }
+  }
+
+  @NotNull
+  private Object parseFloat(String val) {
+    boolean fl = StringUtil.containsAnyChar(val, ".,ef");
+    try {
+      return fl ? Double.parseDouble(val) : Integer.parseInt(val);
+    }
+    catch (NumberFormatException e) {
+      return val;
+    }
+  }
+
+  @Nullable
+  private Object parseInt(String val) {
+    try {
+      return Integer.parseInt(val);
+    }
+    catch (NumberFormatException e) {
+      try {
+        return new BigInteger(val);
+      }
+      catch (NumberFormatException e2) {
+        return val;
+      }
+    }
   }
 
   @Override

@@ -40,7 +40,7 @@ allprojects {
   
   patchPluginXml {
     sinceBuild '182'
-    untilBuild '192'
+    untilBuild '193'
   }
 }
 
