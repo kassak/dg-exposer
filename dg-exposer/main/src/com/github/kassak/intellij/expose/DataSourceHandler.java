@@ -58,10 +58,16 @@ class DataSourceHandler implements Disposable {
 
   }
 
+  @NotNull
+  public LocalDataSource getDataSource() {
+    return myDataSource;
+  }
+
   static void descDataSource(JsonWriter json, LocalDataSource dataSource) throws IOException {
     json.beginObject();
     json.name("uuid").value(dataSource.getUniqueId());
     json.name("name").value(dataSource.getName());
+    json.name("url").value(dataSource.getUrl());
     json.name("dbms").value(dataSource.getDbms().getName());
     json.endObject();
   }

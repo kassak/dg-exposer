@@ -47,17 +47,7 @@ public class TestApp extends PlatformTestCase {
     System.out.println("TestApp is running on port: " + BuiltInServerManager.getInstance().getPort());
     System.out.flush();
     DatabaseSettings.getSettings().warnAboutUnsafeQuery = false;
-    addDataSource("identifier.sqlite", "jdbc:sqlite:identifier.sqlite");
-    addDataSource("h2", "jdbc:h2:mem:db");
     SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
     loop.enter();
-  }
-
-  private void addDataSource(String name, String url) {
-    LocalDataSource ds = LocalDataSource.create(name, null, url, null);
-    ds.setPasswordStorage(Storage.PERSIST);
-    ds.resolveDriver();
-    DatabaseDriverValidator.createDownloaderTask(ds, null).run(new EmptyProgressIndicator());
-    DataSourceStorage.getProjectStorage(getProject()).addDataSource(ds);
   }
 }

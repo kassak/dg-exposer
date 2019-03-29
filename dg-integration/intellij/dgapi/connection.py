@@ -41,6 +41,13 @@ class Connection(object):
         elif 'dsn' in kwargs:
             name = kwargs['dsn']
             self._ds = next((ds for ds in self._dg.data_sources() if ds['name'] == name), None)
+            if 'create' in kwargs:
+                url = kwargs['create']
+                while self._ds is not None and self._ds['url'] != url:
+                    self._dg.delete_data_source(self._ds)
+                    self._ds = next((ds for ds in self._dg.data_sources() if ds['name'] == name), None)
+                if self._ds is None:
+                    self._ds = self._dg.create_data_source(name=name, url=url)
         elif 'dsid' in kwargs:
             uuid = kwargs['dsid']
             self._ds = next((ds for ds in self._dg.data_sources() if ds['uuid'] == uuid), None)

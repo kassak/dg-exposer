@@ -11,6 +11,18 @@ class DGClient(object):
     def data_source(self, ds):
         return self._perform(self._mk_request("database/dataSources/{0}/", ds))
 
+    def delete_data_source(self, ds):
+        r = self._mk_request("database/dataSources/{0}/", ds)
+        r.method = "DELETE"
+        return self._perform(r)
+
+    def create_data_source(self, **kwargs):
+        r = self._mk_request("database/dataSources/")
+        r.method = "POST"
+        assert "name" in kwargs and "url" in kwargs
+        r.data = bytes(json.dumps(kwargs), 'utf8')
+        return self._perform(r)
+
     def connections(self, ds):
         return self._perform(self._mk_request("database/dataSources/{0}/connections/", ds))
 

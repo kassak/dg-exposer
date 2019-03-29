@@ -28,7 +28,14 @@ class DGAPIConnector(Connector):
     def _parse_url(url):
         c_str = str(url)
         c_str = c_str[c_str.index("://") + 3:]
-        return [[], {"dsn": c_str}]
+        pidx = c_str.index("/?")
+        kws = {}
+        if pidx == -1:
+            kws['dsn'] = c_str
+        else:
+            kws['dsn'] = c_str[:pidx]
+            kws.update(url.query)
+        return [[], kws]
 
     @staticmethod
     def get_dbms(url):

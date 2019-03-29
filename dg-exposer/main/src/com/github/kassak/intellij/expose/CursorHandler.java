@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.github.kassak.intellij.expose.DataGripExposerService.*;
+import static java.time.temporal.ChronoField.*;
 
 class CursorHandler implements Disposable {
   private final UUID myUuid;
@@ -378,12 +379,17 @@ class CursorHandler implements Disposable {
     }
 
     private static final DateTimeFormatter FRAC_FORMATTER = new DateTimeFormatterBuilder()
-      .appendLiteral('.')
+//      .appendLiteral('.')
       .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9,true)
       .parseStrict()
       .toFormatter();
     private static final DateTimeFormatter TIME_FORMATTER = new DateTimeFormatterBuilder()
-      .append(DateTimeFormatter.ISO_LOCAL_TIME)
+      .appendValue(HOUR_OF_DAY, 2)
+      .appendLiteral(':')
+      .appendValue(MINUTE_OF_HOUR, 2)
+      .optionalStart()
+      .appendLiteral(':')
+      .appendValue(SECOND_OF_MINUTE, 2)
       .appendOptional(FRAC_FORMATTER)
       .toFormatter();
     private static final DateTimeFormatter DATE_FORMATTER = new DateTimeFormatterBuilder()

@@ -68,7 +68,14 @@ public class DataGripExposerService extends RestService {
 
   private String processDataSources(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context, int base) throws IOException {
     if (isEnd(urlDecoder, base)) {
-      return request.method() == HttpMethod.GET ? ProjectHandler.processDescAllDataSources(request, context) : badRequest(request, context);
+      if (request.method() == HttpMethod.GET) {
+        return ProjectHandler.processDescAllDataSources(request, context);
+      }
+      else if (request.method() == HttpMethod.POST) {
+        Project project = getAllProjects().first(); //todo:
+        return ProjectHandler.getInstance(project).processCreateDataSource(request, context);
+      }
+      else return badRequest(request, context);
     }
     String dataSourceId = extractItem(urlDecoder, base);
     if (dataSourceId != null) {
