@@ -13,7 +13,7 @@ setup(
     keywords='IntelliJ IDEA DataGrip PhpStorm PyCharm GoLand',
     entry_points={
         'sqlalchemy.dialects': [
-            'dg = intellij.alchemy.dgapi:DefaultDialect_dgapi',
+            'dg = intellij.alchemy.dgapi:DynamicDialect_dgapi',
         ]
     }
 )

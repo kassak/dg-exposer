@@ -4,6 +4,7 @@ import com.intellij.database.dataSource.DataSourceStorage;
 import com.intellij.database.dataSource.LocalDataSource;
 import com.intellij.database.dataSource.LocalDataSource.Storage;
 import com.intellij.database.dataSource.validation.DatabaseDriverValidator;
+import com.intellij.database.settings.DatabaseSettings;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.testFramework.PlatformTestCase;
@@ -42,8 +43,10 @@ public class TestApp extends PlatformTestCase {
         return null;
       }
     }, getTestRootDisposable());
+    BuiltInServerManager.getInstance().waitForStart();
     System.out.println("TestApp is running on port: " + BuiltInServerManager.getInstance().getPort());
     System.out.flush();
+    DatabaseSettings.getSettings().warnAboutUnsafeQuery = false;
     addDataSource("identifier.sqlite", "jdbc:sqlite:identifier.sqlite");
     addDataSource("h2", "jdbc:h2:mem:db");
     SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();

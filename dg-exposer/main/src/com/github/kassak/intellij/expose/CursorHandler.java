@@ -5,6 +5,9 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import com.intellij.database.datagrid.DataConsumer;
+import com.intellij.database.extractors.ObjectFormatter;
+import com.intellij.database.extractors.tz.TimeZonedTime;
+import com.intellij.database.run.ui.grid.editors.DataGridFormattersUtil;
 import com.intellij.database.util.JdbcUtil;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Disposer;
@@ -20,11 +23,16 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.concurrency.Promise;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.UUID;
 
@@ -130,18 +138,10 @@ class CursorHandler implements Disposable {
   private void describeColumn(JsonWriter json, DataConsumer.Column column) throws IOException {
     json.beginObject();
     json.name("name").value(column.name);
-    json.name("type").value(getType(column.type));
+    json.name("type").value(MyType.getType(column).code);
     json.name("precision").value(column.precision);
     json.name("scale").value(column.scale);
     json.endObject();
-  }
-
-  private String getType(int type) {
-    if (type == Types.BIGINT || type == Types.INTEGER || type == Types.SMALLINT) return "I";
-    if (JdbcUtil.isNumberType(type)) return "N";
-    if (JdbcUtil.isStringType(type)) return "S";
-    if (JdbcUtil.isDateTimeType(type)) return "D";
-    return "B";
   }
 
   private String processFetch(@NotNull QueryStringDecoder urlDecoder, @NotNull FullHttpRequest request, @NotNull ChannelHandlerContext context) throws IOException {
@@ -164,7 +164,7 @@ class CursorHandler implements Disposable {
     try {
       return sendJson(json -> {
         try {
-          serializeResultSet(json, limit);
+          serializeResultSet(json, myCursor.getColumns(), limit);
         }
         catch (InterruptedException e) {
           throw new RuntimeException(e);
@@ -183,22 +183,31 @@ class CursorHandler implements Disposable {
     return true;
   }
 
-  private void serializeResultSet(JsonWriter json, int limit) throws IOException, InterruptedException {
+  private void serializeResultSet(JsonWriter json, List<DataConsumer.Column> columns, int limit) throws IOException, InterruptedException {
     json.beginArray();
     List<DataConsumer.Row> rows = myCursor.fetch(limit);
     if (limit == -1 || rows.size() < limit) myHasData = false;
     for (DataConsumer.Row row : rows) {
       json.beginArray();
-      for (Object value : row.values) {
-        serializeValue(json, value);
+      Object[] values = row.values;
+      for (int i = 0; i < values.length; i++) {
+        Object value = values[i];
+        DataConsumer.Column column = columns != null && i < columns.size() ? columns.get(i) : null;
+        serializeValue(json, column, value);
       }
       json.endArray();
     }
     json.endArray();
   }
 
-  private void serializeValue(JsonWriter json, Object value) throws IOException {
-    json.value(value == null ? null : value.toString());
+  private void serializeValue(JsonWriter json, DataConsumer.Column column, Object value) throws IOException {
+    MyType type = value == null ? null : MyType.getType(column);
+    if (type == null) {
+      json.value(value == null ? null : value.toString());
+    }
+    else {
+       type.serialize(json, value);
+    }
   }
 
   private void parseExecRequest(@NotNull FullHttpRequest request, Ref<String> query, List<Object> params) throws IOException {
@@ -231,7 +240,7 @@ class CursorHandler implements Disposable {
       else throw new AssertionError("Unexpected: " + name);
     }
     json.endObject();
-    return parseParam(val, type);
+    return parseParam(val, MyType.getType(type));
   }
 
   private String getOptString(JsonReader json) throws IOException {
@@ -240,51 +249,166 @@ class CursorHandler implements Disposable {
     return null;
   }
 
-  private Object parseParam(String val, String type) {
-    if (type == null || val == null || "S".equals(type) || "B".equals(type)) return val;
-    if ("I".equals(type)) return parseInt(val);
-    if ("N".equals(type)) return parseFloat(val);
-    if ("D".equals(type)) return parseDate(val);
-    return null;
-  }
-
-  @Nullable
-  private Object parseDate(String val) {
-    try {
-      return LocalDateTime.parse(val);
-    }
-    catch (DateTimeParseException e) {
-      return val;
-    }
-  }
-
-  @NotNull
-  private Object parseFloat(String val) {
-    boolean fl = StringUtil.containsAnyChar(val, ".,ef");
-    try {
-      return fl ? Double.parseDouble(val) : Integer.parseInt(val);
-    }
-    catch (NumberFormatException e) {
-      return val;
-    }
-  }
-
-  @Nullable
-  private Object parseInt(String val) {
-    try {
-      return Integer.parseInt(val);
-    }
-    catch (NumberFormatException e) {
-      try {
-        return new BigInteger(val);
-      }
-      catch (NumberFormatException e2) {
-        return val;
-      }
-    }
+  private Object parseParam(String val, MyType type) {
+    if (type == null || val == null) return val;
+    return type.parse(val);
   }
 
   @Override
   public void dispose() {
+  }
+
+  private enum MyType {
+    INT("I") {
+      @Override
+      Object parse(String val) {
+        try {
+          return Integer.parseInt(val);
+        }
+        catch (NumberFormatException e) {
+          try {
+            return new BigInteger(val);
+          }
+          catch (NumberFormatException e2) {
+            return val;
+          }
+        }
+      }
+    },
+    BOOL("1") {
+      @Override
+      Object parse(String val) {
+        try {
+          return Integer.parseInt(val) == 1;
+        }
+        catch (NumberFormatException e) {
+          return val;
+        }
+      }
+
+      @Override
+      public void serialize(JsonWriter json, Object val) throws IOException {
+        if (val instanceof Boolean) {
+          json.value((Boolean)val ? "1" : "0");
+          return;
+        }
+        super.serialize(json, val);
+      }
+    },
+    NUM("N") {
+      @Override
+      Object parse(String val) {
+        boolean fl = StringUtil.containsAnyChar(val, ".,ef");
+        try {
+          return fl ? Double.parseDouble(val) : Integer.parseInt(val);
+        }
+        catch (NumberFormatException e) {
+          return val;
+        }
+      }
+    },
+    STR("S"),
+    DATE("D") {
+      @Override
+      Object parse(String val) {
+        return parseDate(DATE_FORMATTER, val);
+      }
+    },
+    TIME("T") {
+      @Override
+      Object parse(String val) {
+        return parseDate(TIME_FORMATTER, val);
+      }
+
+      @Override
+      public void serialize(JsonWriter json, Object val) throws IOException {
+//        if (val instanceof TimeZonedTime) {
+//          OffsetDateTime odt = DataGridFormattersUtil.fromTimestamp((TimeZonedTime) val);
+//          json.value(DATE_TIME_FORMATTER.format(odt));
+//          return;
+//        }
+        super.serialize(json, val);
+      }
+    },
+    DATETIME("d") {
+      @Override
+      Object parse(String val) {
+        return parseDate(DATE_TIME_FORMATTER, val);
+      }
+
+      @Override
+      public void serialize(JsonWriter json, Object val) throws IOException {
+        if (val instanceof Timestamp) {
+          OffsetDateTime odt = DataGridFormattersUtil.fromTimestamp((Timestamp) val);
+          json.value(DATE_TIME_FORMATTER.format(odt));
+          return;
+        }
+        super.serialize(json, val);
+      }
+    },
+    BIN("b");
+
+    final String code;
+
+    MyType(String code) {
+      this.code = code;
+    }
+
+    static MyType getType(DataConsumer.Column column) {
+      int type = column.type;
+      if (type == Types.BIGINT || type == Types.INTEGER || type == Types.SMALLINT) return INT;
+      if (ObjectFormatter.isBooleanColumn(column)) return BOOL;
+      if (JdbcUtil.isNumberType(type) || type == Types.REAL) return NUM;
+      if (JdbcUtil.isStringType(type)) return STR;
+      if (type == Types.DATE) return DATE;
+      if (type == Types.TIME) return TIME;
+      if (JdbcUtil.isDateTimeType(type)) return DATETIME;
+      return BIN;
+    }
+
+    static MyType getType(@Nullable String code) {
+      for (MyType type : MyType.values()) {
+        if (type.code.equals(code)) return type;
+      }
+      throw new AssertionError("unknown " + code);
+    }
+
+    Object parse(String val) {
+      return val;
+    }
+
+    private static final DateTimeFormatter FRAC_FORMATTER = new DateTimeFormatterBuilder()
+      .appendLiteral('.')
+      .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9,true)
+      .parseStrict()
+      .toFormatter();
+    private static final DateTimeFormatter TIME_FORMATTER = new DateTimeFormatterBuilder()
+      .append(DateTimeFormatter.ISO_LOCAL_TIME)
+      .appendOptional(FRAC_FORMATTER)
+      .toFormatter();
+    private static final DateTimeFormatter DATE_FORMATTER = new DateTimeFormatterBuilder()
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .parseStrict()
+      .toFormatter();
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
+      .append(DATE_FORMATTER)
+      .appendLiteral(' ')
+      .append(TIME_FORMATTER)
+      .toFormatter();
+
+
+    @Nullable
+    protected Object parseDate(DateTimeFormatter fmt, String val) {
+      try {
+        return LocalDateTime.parse(val, fmt);
+      }
+      catch (DateTimeParseException e) {
+        return val;
+      }
+    }
+
+    public void serialize(JsonWriter json, Object val) throws IOException {
+      json.value(val.toString());
+    }
   }
 }

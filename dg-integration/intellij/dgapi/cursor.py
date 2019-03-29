@@ -1,6 +1,3 @@
-from datetime import date, time, datetime
-from numbers import Number
-
 import dateutil.parser
 
 from intellij.dgapi.exceptions import Error, DatabaseError, OperationalError
@@ -30,7 +27,10 @@ class Cursor(object):
     @property
     def description(self):
         self._ensure_desc()
-        return None if self._desc is None else [t[1] for t in self._desc]
+        return None if self._desc is None else [
+            (c[0], c[1][1], None, None, c[2], c[3], None)
+            for c in self._desc
+        ]
 
     def _ensure_desc(self):
         if self._desc is None:
@@ -86,7 +86,7 @@ class Cursor(object):
     def _fetch(self, limit):
         self._ensure_desc()
         return _deserialize_rows(self._handle_error(self._dg.fetch(self._con._ds, self._con._con, self._cursor, limit)),
-                                 self.description)
+                                 self._desc)
 
     def fetchone(self):
         res = self._fetch(1)
@@ -143,18 +143,25 @@ def _deserialize_row(row, desc):
     return [_deserialize_val(v, d) for v, d in zip(row, desc)]
 
 
-def _deserialize_val(val, t):
+def _deserialize_val(val, d):
+    t = d[1]
     if val is None:
         return val
     try:
-        if t == _I:
+        if t == _INT:
             return int(val)
-        if t == _N:
+        if t == _BOOL:
+            return int(val) == 1
+        if t == _NUM:
             return float(val)
-        if t == _B:
+        if t == _BIN:
             return bytes(val, 'latin1')
-        if t == _D:
+        if t == _DATE:
+            return dateutil.parser.parse(val).date()
+        if t == _DATETIME:
             return dateutil.parser.parse(val)
+        if t == _TIME:
+            return dateutil.parser.parse(val).time()
         return val
     except:
         return val
@@ -164,11 +171,8 @@ def _parse_desc(desc):
     return [(
         d.get('name'),
         _parse_type(d.get('type')),
-        None,
-        None,
         d.get('precision'),
         d.get('scale'),
-        None
     ) for d in desc] if desc else None
 
 
@@ -181,31 +185,51 @@ def _format_parameters(params):
 
 def _format_parameter(p):
     tp = _guess_type(p)
-    return {'value': None if p is None else str(p), 'type': tp[0]}
+    return {'value': _format_val(p), 'type': tp[0]}
+
+
+def _format_val(p):
+    if p is None:
+        return None
+    if isinstance(p, bool):
+        return '1' if p else '0'
+    return str(p)
 
 
 def _parse_type(code):
     global _types
-    return next((t for t in _types if t[0] == code), _S)
+    return next((t for t in _types if t[0] == code), _STR)
 
 
 def _guess_type(val):
+    import datetime as dt
+    from numbers import Number
+
+    if isinstance(val, bool):
+        return _BOOL
     if isinstance(val, int):
-        return _I
+        return _INT
     if isinstance(val, Number):
-        return _N
-    if isinstance(val, date) or isinstance(val, datetime.datetime) or isinstance(val, datetime.time):
-        return _D
+        return _NUM
+    if isinstance(val, dt.datetime):
+        return _DATETIME
+    if isinstance(val, dt.date):
+        return _DATE
+    if isinstance(val, dt.time):
+        return _TIME
     if isinstance(val, bytes):
-        return _B
-    return _S
+        return _BIN
+    return _STR
 
 
-_S = ('S', STRING)
-_N = ('N', NUMBER)
-_I = ('I', NUMBER)
-_D = ('D', DATETIME)
-_R = ('R', ROWID)
-_B = ('B', BINARY)
+_STR = ('S', STRING)
+_BOOL = ('1', NUMBER)
+_NUM = ('N', NUMBER)
+_INT = ('I', NUMBER)
+_DATE = ('D', DATETIME)
+_DATETIME = ('d', DATETIME)
+_TIME = ('T', DATETIME)
+_ROWID = ('R', ROWID)
+_BIN = ('B', BINARY)
 
-_types = [_S, _N, _I, _D, _R, _B]
+_types = [_STR, _NUM, _INT, _DATE, _DATETIME, _TIME, _ROWID, _BIN, _BOOL]

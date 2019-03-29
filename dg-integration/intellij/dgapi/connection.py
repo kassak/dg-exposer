@@ -55,6 +55,9 @@ class Connection(object):
             raise Error("Connection closed")
         self._close()
 
+    def dbms(self):
+        return self._ds['dbms']
+
     def commit(self):
         self._handle_error(self._dg.commit(self._ds, self._con))
 

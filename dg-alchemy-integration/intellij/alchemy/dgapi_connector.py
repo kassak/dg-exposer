@@ -22,9 +22,22 @@ class DGAPIConnector(Connector):
         return module
 
     def create_connect_args(self, url):
+        return self._parse_url(url)
+
+    @staticmethod
+    def _parse_url(url):
         c_str = str(url)
         c_str = c_str[c_str.index("://") + 3:]
         return [[], {"dsn": c_str}]
+
+    @staticmethod
+    def get_dbms(url):
+        params = DGAPIConnector._parse_url(url)
+        try:
+            with DGAPIConnector.dbapi().connect(**params[1]) as c:
+                return c.dbms()
+        except:
+            return None
 
     def is_disconnect(self, e, connection, cursor):
         if isinstance(e, self.dbapi.ProgrammingError):

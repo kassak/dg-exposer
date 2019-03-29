@@ -98,7 +98,26 @@ class TestDBAPI(unittest.TestCase):
         with self.connect('h2') as c:
             with c.cursor() as cur:
                 cur.execute('select now()')
-                self.assertIsInstance(cur.fetchone()[0], datetime.datetime)
+                n = cur.fetchone()[0]
+                self.assertIsInstance(n, datetime.datetime)
+
+    def test_date_time(self):
+        with self.connect('pg') as c:
+            with c.cursor() as cur:
+                bd = datetime.datetime(1991, 4, 7, 0, 40)
+                cur.execute('select ?::timestamp', (bd, ))
+                n = cur.fetchone()[0]
+                self.assertIsInstance(n, datetime.datetime)
+                self.assertEqual(bd, n)
+
+    def test_time(self):
+        with self.connect('pg') as c:
+            with c.cursor() as cur:
+                bd = datetime.time(0, 40)
+                cur.execute('select ?::time', (bd, ))
+                n = cur.fetchone()[0]
+                self.assertIsInstance(n, datetime.time)
+                self.assertEqual(bd, n)
 
 
 if __name__ == '__main__':
