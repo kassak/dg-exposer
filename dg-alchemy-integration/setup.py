@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='dg-alchemy-integration',
-    version='0.0.1',
+    version='0.0.2',
     author='Alexander Kass',
     description='Implementation of SQLAlchemy API for DataGrip connection',
     license='MIT',

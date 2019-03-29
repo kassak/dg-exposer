@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='dg-integration',
-    version='0.0.1',
+    version='0.0.2',
     author='Alexander Kass',
     description='Implementation of DBAPI v2 on the top of DataGrip',
     license='MIT',
